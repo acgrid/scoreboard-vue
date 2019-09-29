@@ -5,7 +5,11 @@
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
-    "lint": "vue-cli-service lint"
+    "lint": "vue-cli-service lint",
+    "dev": "cross-env NODE_ENV=development yarn build:server && npm-run-all --parallel watch:server watch:bundle",
+    "build:server": "webpack --progress --colors --config server/webpack.conf.js",
+    "watch:bundle": "cross-env NODE_ENV=development DEBUG=sc:* node-dev dist-server/bundle-dev.js",
+    "watch:server": "cross-env NODE_ENV=development webpack --progress --colors --watch --config server/webpack.conf.js"
   },
   "dependencies": {
     "@hapi/boom": "^8.0.1",
@@ -23,9 +27,12 @@
     "express": "^4.17.1",
     "express-async-errors": "^3.1.1",
     "express-json-error-handler": "^3.0.0",
-    "ioredis": "^4.14.1",
     "loadsh": "^0.0.4",
+    "mongoose": "^5.7.1",
     "register-service-worker": "^1.6.2",
+    "saslprep": "^1.0.3",
+    "socket.io": "^2.3.0",
+    "socket.io-client": "^2.3.0",
     "vue": "^2.6.10",
     "vue-router": "^3.0.3",
     "vuex": "^3.0.1"
