@@ -19,3 +19,13 @@ yarn-error.log*
 *.njsproj
 *.sln
 *.sw?
+
+# Custom
+
+/dist
+/dist-server
+
+/config/local.js
+/config/production.js
+*debug.cmd
+/tmp
