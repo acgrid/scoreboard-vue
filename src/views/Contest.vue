@@ -20,9 +20,11 @@
       <b-table
         v-if="grouped"
         bordered
-        striped
         :items="rowsPaged"
         :fields="cols"
+        :tbody-tr-class="highlight"
+        :sort-by.sync="sortBy"
+        :sort-desc.sync="sortDesc"
         responsive="sm"
       >
         <template v-for="col in scoreCols" v-slot:[`cell(${col.key})`]="row">
@@ -96,6 +98,8 @@ export default {
       scores: [],
       group: 0, // current group
       page: 1,
+      sortBy: 'seq',
+      sortDesc: false,
       form: { judge: this.$route.query.judge || '', password: '' }
     }
   },
@@ -130,6 +134,9 @@ export default {
         console.warn(e)
         return null
       }
+    },
+    highlightEnabled () {
+      return this.grouped && (this.grouped.head || this.grouped.tail)
     },
     scoreCols () {
       if (!this.contest) return []
@@ -202,6 +209,16 @@ export default {
       if (!this.user) return
       const index = this.scores.findIndex(s => s.judge === score.judge && s.candidate === score.candidate && s.evaluation === score.evaluation)
       index === -1 ? this.scores.push(score) : this.$set(this.scores, index, score)
+    },
+    highlight (row) {
+      if (this.highlightEnabled && row.total) {
+        const rank = this.rowsPaged.filter(r => r.total && r.total > row.total).length + 1
+        const { head, chunk, tail } = this.grouped
+        if (head && rank <= head) return 'table-success'
+        if (chunk && tail && rank > chunk - tail) return 'table-danger'
+      }
+      if (row.total) return 'table-warning'
+      if (row.seq % 2) return 'table-secondary'
     },
     auth () {
       this.socket.emit('auth', this.id, this.form.judge, this.form.password, resp => {
