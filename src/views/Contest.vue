@@ -21,10 +21,8 @@
         v-if="grouped"
         bordered
         striped
-        :items="rows"
+        :items="rowsPaged"
         :fields="cols"
-        :current-page="page"
-        :per-page="grouped.chunk"
         responsive="sm"
       >
         <template v-for="col in scoreCols" v-slot:[`cell(${col.key})`]="row">
@@ -130,15 +128,15 @@ export default {
       const columns = []
       this.contest.evaluations.forEach(group => {
         group.items.forEach(item => {
-          columns.push({ key: item._id, label: item.name, min: item.min, max: item.max, step: item.step })
+          columns.push({ key: item._id, label: item.name, sortable: true, min: item.min, max: item.max, step: item.step })
         })
       })
       return columns
     },
     cols () {
-      const columns = [{ key: 'seq', label: '参赛号'}, { key: 'name', label: '选手名'}, { key: 'nickname', label: '昵称'}]
+      const columns = [{ key: 'seq', label: '参赛号', sortable: true}, { key: 'name', label: '选手名'}, { key: 'nickname', label: '昵称'}]
       columns.push(...this.scoreCols)
-      columns.push({ key: 'total', label: '总分' })
+      columns.push({ key: 'total', label: '总分', sortable: true })
       return columns
     },
     rows () {
@@ -155,10 +153,12 @@ export default {
           return candidate
         })
         return candidates
-        // return group.chunk ? chunk(candidates, group.chunk) : [candidates]
       } catch (e) {
         return []
       }
+    },
+    rowsPaged () {
+      return this.grouped ? this.rows.slice(this.grouped.chunk * (this.page - 1), this.grouped.chunk * this.page) : []
     }
   },
   methods: {
@@ -213,7 +213,8 @@ export default {
     & /deep/ table {
       margin-top: 1em;
       input[type=number]{
-        width: 4em;
+        width: 3.5em;
+        padding: 0;
       }
     }
     & /deep/ ol {
