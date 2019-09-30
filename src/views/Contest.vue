@@ -133,7 +133,6 @@ export default {
       try {
         return this.contest.groups[this.group]
       } catch (e) {
-        console.warn(e)
         return null
       }
     },
@@ -248,7 +247,6 @@ export default {
       if (evaluation.step && score % evaluation.step > 0.1) return this.errorInput(ev.target, '打分小数规则不满足')
       this.socket.emit('score', evaluation.key, candidate, score, resp => {
         if (resp.e) {
-          console.error(resp.e)
           this.errorInput(ev.target, '上传评分失败')
         } else if (resp.s) {
           this.parse(resp.s)
