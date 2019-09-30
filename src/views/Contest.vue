@@ -29,7 +29,7 @@
       >
         <template v-for="col in scoreCols" v-slot:[`cell(${col.key})`]="row">
           <span v-if="readonly">{{ row.value }}</span>
-          <input v-else :key="col.key" class="text-right" type="number" pattern="[0-9]+(\.[0-9]+)?" :value="row.value" :min="col.min" :max="col.max" :step="col.step" @change="update($event, col, row.item._id)" />
+          <input v-else :key="col.key" class="text-right" type="number" pattern="[0-9]+(\.[0-9]+)?" :value="row.value" :min="col.min" :max="col.max" :step="col.step" @change="update($event, col, row.item._id)" @focus="$event.target.select()" />
         </template>
         <template v-slot:thead-top="data">
           <b-tr>
