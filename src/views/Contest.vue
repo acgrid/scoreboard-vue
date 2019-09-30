@@ -28,8 +28,10 @@
         responsive="sm"
       >
         <template v-for="col in scoreCols" v-slot:[`cell(${col.key})`]="row">
-          <span v-if="readonly">{{ typeof row.value === 'number' ? row.value.toFixed(2) : '-' }}</span>
-          <input v-else :key="col.key" class="text-right" type="number" pattern="[0-9]+(\.[0-9]+)?" :value="row.value" :min="col.min" :max="col.max" :step="col.step" @change="update($event, col, row.item._id)" @focus="$event.target.select()" />
+          <div :key="col.key">
+            <span v-if="readonly">{{ typeof row.value === 'number' ? row.value.toFixed(2) : '-' }}</span>
+            <input v-else class="text-right" type="number" pattern="[0-9]+(\.[0-9]+)?" :value="row.value" :min="col.min" :max="col.max" :step="col.step" @change="update($event, col, row.item._id)" @focus="$event.target.select()" />
+          </div>
         </template>
         <template v-slot:cell(total)="row">
           <b>{{ typeof row.value === 'number' ? row.value.toFixed(2) : '-' }}</b>
@@ -86,7 +88,7 @@
 <script>
 import moment from 'moment'
 import socket from '../api/socket'
-import { isRoot, isGuest } from '../../lib/identity'
+import { isGuest } from '../../lib/identity'
 export default {
   name: 'Contest',
   data () {
@@ -150,7 +152,7 @@ export default {
     },
     cols () {
       if (!this.contest) return []
-      const columns = [{ key: 'seq', label: '参赛号', sortable: true}, { key: 'name', label: '选手名'}, { key: 'nickname', label: '昵称'}]
+      const columns = [{ key: 'seq', label: '参赛号', sortable: true }, { key: 'name', label: '选手名' }, { key: 'nickname', label: '昵称' }]
       columns.push(...this.scoreCols)
       columns.push({ key: 'total', label: '总分', sortable: true })
       return columns
@@ -175,7 +177,7 @@ export default {
               }
             })
           })
-          candidate.total = hasTotal ? hasTotal : null
+          candidate.total = hasTotal || null
           return candidate
         })
         return candidates
@@ -237,7 +239,10 @@ export default {
     },
     update (ev, evaluation, candidate) {
       const score = parseFloat(ev.target.value)
-      if (Number.isNaN(score)) return ev.target.value = ''
+      if (Number.isNaN(score)) {
+        ev.target.value = ''
+        return
+      }
       if (score < evaluation.min) return this.errorInput(ev.target, '打分低于起始分')
       if (evaluation.max && score > evaluation.max) return this.errorInput(ev.target, '打分高于满分')
       if (evaluation.step && score % evaluation.step > 0.1) return this.errorInput(ev.target, '打分小数规则不满足')
@@ -253,10 +258,10 @@ export default {
     exit () {
       this.user = null
       this.judge = null
-      this.contest = null,
+      this.contest = null
       this.scores = []
       this.group = 0
-      this.page = 1,
+      this.page = 1
       this.form.judge = ''
       this.form.password = ''
       localStorage.removeItem('judge')
