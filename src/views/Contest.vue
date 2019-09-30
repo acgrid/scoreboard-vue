@@ -88,7 +88,6 @@ import { isRoot, isGuest } from '../../lib/identity'
 export default {
   name: 'Contest',
   data () {
-    const judge = this.$route.query.judge
     return {
       socket,
       user: null,
@@ -97,7 +96,7 @@ export default {
       scores: [],
       group: 0, // current group
       page: 1,
-      form: { judge: judge || (localStorage.getItem('judge') || ''), password: judge ? '' : (localStorage.getItem('password') || '') }
+      form: { judge: this.$route.query.judge || '', password: '' }
     }
   },
   computed: {
@@ -182,7 +181,14 @@ export default {
     }
   },
   created () {
-    if (this.form.judge && this.form.password) this.auth()
+    const judge = localStorage.getItem('judge')
+    if (this.$route.query.judge !== judge) return
+    const password = localStorage.getItem('password')
+    if (judge && password) {
+      this.form.judge = judge
+      this.form.password = password
+      this.auth()
+    }
   },
   methods: {
     error (msg, title = '错误') {
@@ -214,6 +220,7 @@ export default {
     },
     update (ev, evaluation, candidate) {
       const score = parseFloat(ev.target.value)
+      if (Number.isNaN(score)) return ev.target.value = ''
       if (score < evaluation.min) return this.errorInput(ev.target, '打分低于起始分')
       if (evaluation.max && score > evaluation.max) return this.errorInput(ev.target, '打分高于满分')
       if (evaluation.step && score % evaluation.step > 0.1) return this.errorInput(ev.target, '打分小数规则不满足')

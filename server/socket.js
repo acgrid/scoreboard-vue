@@ -1,7 +1,7 @@
 import io from 'socket.io'
 import debug from 'debug'
 
-import { isJudge } from '../lib/identity'
+import { isRoot, isGuest, isJudge } from '../lib/identity'
 import Judge from './model/judge'
 import Contest from './model/contest'
 import Score from './model/score'
@@ -18,7 +18,7 @@ export default function (http) {
       const resp = {}
       resp.contest = await Contest.findById(contest).populate('judges', '-password').populate('evaluations.items').populate('groups.candidates')
       if (!resp.contest) return ack({ error: '赛事不存在' })
-      if (!resp.contest.judges.find(j => j._id === judge)) return ack({ error: '不是本赛事评委' })
+      if (isJudge(judge) && !resp.contest.judges.find(j => j._id === judge)) return ack({ error: '不是本赛事评委' })
       resp.judge = await Judge.findOne({ _id: judge, password }, '-password')
       if (!resp.judge) return ack({ error: '评委密码错误' })
       socket.join(contest, async error => {
