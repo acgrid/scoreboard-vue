@@ -11,7 +11,7 @@
             <b-form-radio-group v-model="group" :options="groups"></b-form-radio-group>
           </b-form-group>
         </b-col>
-        <b-col v-if="judge" class="text-left">
+        <b-col v-if="judges" class="text-left">
           <b-form-group label="评委姓名：">
             <b-form-radio-group v-model="judge" :options="judges"></b-form-radio-group>
           </b-form-group>
@@ -26,8 +26,11 @@
         responsive="sm"
       >
         <template v-for="col in scoreCols" v-slot:[`cell(${col.key})`]="row">
-          <span v-if="readonly">{{ row.value }}</span>
+          <span v-if="readonly">{{ typeof row.value === 'number' ? row.value.toFixed(2) : '-' }}</span>
           <input v-else :key="col.key" class="text-right" type="number" pattern="[0-9]+(\.[0-9]+)?" :value="row.value" :min="col.min" :max="col.max" :step="col.step" @change="update($event, col, row.item._id)" @focus="$event.target.select()" />
+        </template>
+        <template v-slot:cell(total)="row">
+          <b>{{ typeof row.value === 'number' ? row.value.toFixed(2) : '-' }}</b>
         </template>
         <template v-slot:thead-top="data">
           <b-tr>
@@ -48,6 +51,9 @@
       <ol class="text-left" v-if="contest">
         <li v-for="(rule, index) in contest.rules" :key="index">{{ rule }}</li>
       </ol>
+      <b-row>
+        <b-col><b-button variant="danger" @click="exit">切换评委</b-button></b-col>
+      </b-row>
     </main>
     <template v-else>
       <h2>请认证</h2>
@@ -58,6 +64,7 @@
             v-model="form.judge"
             type="text"
             required
+            autocomplete="off"
           ></b-form-input>
         </b-form-group>
         <b-form-group label="密码：" label-for="password">
@@ -65,6 +72,7 @@
             id="password"
             type="password"
             v-model="form.password"
+            autocomplete="off"
             required
           ></b-form-input>
         </b-form-group>
@@ -80,16 +88,16 @@ import { isRoot, isGuest } from '../../lib/identity'
 export default {
   name: 'Contest',
   data () {
+    const judge = this.$route.query.judge
     return {
       socket,
       user: null,
-      judge: null,
+      judge: null, // NULL i.e averaged
       contest: null,
       scores: [],
-      averaged: false, // TRUE for all
       group: 0, // current group
       page: 1,
-      form: { judge: '', password: '' }
+      form: { judge: judge || (localStorage.getItem('judge') || ''), password: judge ? '' : (localStorage.getItem('password') || '') }
     }
   },
   computed: {
@@ -97,7 +105,7 @@ export default {
       return this.$route.params.id
     },
     readonly () {
-      return (isGuest(this.user) || this.user !== this.judge) && !isRoot(this.user)
+      return isGuest(this.user) || this.judge === null || this.user !== this.judge
     },
     date () {
       if (!this.contest) return null
@@ -105,9 +113,9 @@ export default {
     },
     judges () {
       if (!this.contest) return []
-      return this.contest.judges.map((j) => {
+      return [{ text: '平均', value: null }, ...this.contest.judges.map((j) => {
         return { text: j.name, value: j._id }
-      })
+      })]
     },
     groups () {
       if (!this.contest) return []
@@ -125,6 +133,7 @@ export default {
       }
     },
     scoreCols () {
+      if (!this.contest) return []
       const columns = []
       this.contest.evaluations.forEach(group => {
         group.items.forEach(item => {
@@ -134,6 +143,7 @@ export default {
       return columns
     },
     cols () {
+      if (!this.contest) return []
       const columns = [{ key: 'seq', label: '参赛号', sortable: true}, { key: 'name', label: '选手名'}, { key: 'nickname', label: '昵称'}]
       columns.push(...this.scoreCols)
       columns.push({ key: 'total', label: '总分', sortable: true })
@@ -142,14 +152,24 @@ export default {
     rows () {
       try {
         const candidates = this.grouped.candidates.map(candidate => {
-          candidate.total = 0
+          let hasTotal = 0
           this.contest.evaluations.forEach(e => {
             e.items.forEach(item => {
-              const s = this.scores.find(s => s.judge === this.judge && s.candidate === candidate._id && s.evaluation === item._id)
-              candidate[item._id] = s ? s.score : null
-              if (s) candidate.total += s.score
+              if (this.judge) {
+                const s = this.scores.find(s => s.judge === this.judge && s.candidate === candidate._id && s.evaluation === item._id)
+                candidate[item._id] = s ? s.score : null
+              } else {
+                const s = this.scores.filter(s => s.candidate === candidate._id && s.evaluation === item._id)
+                candidate[item._id] = s.length ? s.reduce((sum, s) => sum + s.score, 0) / s.length : null
+              }
+              if (candidate[item._id] === null) {
+                hasTotal = false
+              } else {
+                if (hasTotal !== false) hasTotal += candidate[item._id]
+              }
             })
           })
+          candidate.total = hasTotal ? hasTotal : null
           return candidate
         })
         return candidates
@@ -161,6 +181,9 @@ export default {
       return this.grouped ? this.rows.slice(this.grouped.chunk * (this.page - 1), this.grouped.chunk * this.page) : []
     }
   },
+  created () {
+    if (this.form.judge && this.form.password) this.auth()
+  },
   methods: {
     error (msg, title = '错误') {
       this.$bvToast.toast(msg, { title, variant: 'danger', solid: true })
@@ -170,8 +193,8 @@ export default {
       this.error(msg, '分数问题')
     },
     parse (score) {
+      if (!this.user) return
       const index = this.scores.findIndex(s => s.judge === score.judge && s.candidate === score.candidate && s.evaluation === score.evaluation)
-      console.log('got score', index, score)
       index === -1 ? this.scores.push(score) : this.$set(this.scores, index, score)
     },
     auth () {
@@ -180,6 +203,8 @@ export default {
           return this.error(resp.error || '认证错误')
         }
         if (!this.user) this.socket.on('reconnect', this.auth) // keep auth if disconnected accidently
+        localStorage.setItem('judge', this.form.judge)
+        localStorage.setItem('password', this.form.password)
         this.user = resp.judge._id
         this.contest = resp.contest
         this.judge = this.contest.judges.find(j => j._id === this.user) ? this.user : this.contest.judges[0]._id
@@ -200,6 +225,18 @@ export default {
           this.parse(resp.s)
         }
       })
+    },
+    exit () {
+      this.user = null
+      this.judge = null
+      this.contest = null,
+      this.scores = []
+      this.group = 0
+      this.page = 1,
+      this.form.judge = ''
+      this.form.password = ''
+      localStorage.removeItem('judge')
+      localStorage.removeItem('password')
     }
   },
   metaInfo: {
@@ -214,6 +251,8 @@ export default {
       margin-top: 1em;
       input[type=number]{
         width: 3.5em;
+        font-size: 0.8em;
+        margin: 0;
         padding: 0;
       }
     }
