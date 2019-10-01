@@ -200,7 +200,7 @@ export default {
   },
   created () {
     const judge = localStorage.getItem('judge')
-    if (this.$route.query.judge !== judge) return
+    if (this.$route.query.judge && this.$route.query.judge !== judge) return
     const password = localStorage.getItem('password')
     if (judge && password) {
       this.form.judge = judge
