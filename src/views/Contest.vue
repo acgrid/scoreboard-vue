@@ -7,7 +7,7 @@
       </b-row>
       <b-row>
         <b-col class="text-left">
-          <b-form-group label="所属分组：">
+          <b-form-group :label="contest.round ? '轮次：' : '所属分组：'">
             <b-form-radio-group v-model="group" :options="groups"></b-form-radio-group>
           </b-form-group>
         </b-col>
@@ -27,6 +27,12 @@
         :sort-desc.sync="sortDesc"
         responsive="sm"
       >
+        <template v-slot:cell(seq)="row">
+          {{ row.value }}
+          <button v-if="root && contest.round && group < contest.groups.length - 1" type="button" class="close" aria-label="Eliminate" @click="eliminate(row.item._id)">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </template>
         <template v-for="col in scoreCols" v-slot:[`head(${col.key})`]>
           <div :key="col.key">
             {{ col.label }}
@@ -45,14 +51,15 @@
         <template v-slot:thead-top="data">
           <b-tr>
             <b-th variant="info" colspan="3">选手信息</b-th>
-            <b-th v-for="(group, index) in contest.evaluations" :key="group._id" :variant="['primary', 'secondary'][index % 2]" :colspan="group.items.length">{{ group.name }}</b-th>
+            <b-th v-if="contest.round" :colspan="contest.evaluations[group].items.length">{{ contest.evaluations[group].name }}</b-th>
+            <b-th v-else v-for="(group, index) in contest.evaluations" :key="group._id" :variant="['primary', 'secondary'][index % 2]" :colspan="group.items.length">{{ group.name }}</b-th>
           </b-tr>
         </template>
       </b-table>
       <b-pagination
         v-if="grouped"
         v-model="page"
-        :total-rows="grouped.candidates.length"
+        :total-rows="virtualRowCount"
         :per-page="grouped.chunk"
         align="fill"
         size="sm"
@@ -96,6 +103,7 @@
 import moment from 'moment'
 import socket from '../api/socket'
 import { isRoot, isGuest } from '../../lib/identity'
+let highlightTick = 0
 export default {
   name: 'Contest',
   data () {
@@ -135,7 +143,7 @@ export default {
     groups () {
       if (!this.contest) return []
       return this.contest.groups.map((g, value) => {
-        return { text: `${g.name}组`, value }
+        return { text: `${g.name}${this.contest.round ? '轮' : '组'}`, value }
       })
     },
     grouped () {
@@ -149,10 +157,14 @@ export default {
     highlightEnabled () {
       return this.grouped && (this.grouped.head || this.grouped.tail)
     },
+    virtualRowCount () {
+      if (!this.contest) return 0
+      return this.round ? this.contest.groups[0].candidates.length : this.grouped.candidates.length
+    },
     scoreCols () {
       if (!this.contest) return []
       const columns = []
-      this.contest.evaluations.forEach(group => {
+      this.iterateRound(group => {
         group.items.forEach(item => {
           columns.push({ key: item._id, label: item.name, sortable: true, min: item.min, max: item.max, step: item.step })
         })
@@ -170,7 +182,7 @@ export default {
       try {
         const candidates = this.grouped.candidates.map(candidate => {
           let hasTotal = 0
-          this.contest.evaluations.forEach(e => {
+          this.iterateRound(e => {
             e.items.forEach(item => {
               if (this.judge) {
                 const s = this.scores.find(s => s.judge === this.judge && s.candidate === candidate._id && s.evaluation === item._id)
@@ -195,7 +207,8 @@ export default {
       }
     },
     rowsPaged () {
-      return this.grouped ? this.rows.slice(this.grouped.chunk * (this.page - 1), this.grouped.chunk * this.page) : []
+      if (!this.grouped || !this.grouped.chunk) return this.rows
+      return this.contest.round ? this.rows.filter(row => Math.ceil(row.seq / this.grouped.chunk) === this.page) : this.rows.slice(this.grouped.chunk * (this.page - 1), this.grouped.chunk * this.page)
     }
   },
   created () {
@@ -216,6 +229,9 @@ export default {
       input.value = ''
       this.error(msg, '分数问题')
     },
+    iterateRound (fn) {
+      this.contest.round && this.contest.evaluations[this.group] ? fn(this.contest.evaluations[this.group]) : this.contest.evaluations.forEach(fn)
+    },
     parse (score) {
       if (!this.user) return
       const index = this.scores.findIndex(s => s.judge === score.judge && s.candidate === score.candidate && s.evaluation === score.evaluation)
@@ -229,7 +245,7 @@ export default {
         if (chunk && tail && rank > chunk - tail) return 'table-danger'
       }
       if (row.total) return 'table-warning'
-      if (row.seq % 2) return 'table-secondary'
+      if (highlightTick++ % 2) return 'table-secondary'
     },
     auth () {
       this.socket.emit('auth', this.id, this.form.judge, this.form.password, resp => {
@@ -244,6 +260,7 @@ export default {
         this.judge = this.contest.judges.find(j => j._id === this.user) ? this.user : this.contest.judges[0]._id
         this.scores = resp.scores
         this.socket.on('score', this.parse)
+        this.socket.on('contest', contest => { this.contest = contest })
       })
     },
     update (ev, evaluation, candidate) {
@@ -262,6 +279,13 @@ export default {
           this.parse(resp.s)
         }
       })
+    },
+    eliminate (candidate) {
+      if (confirm('确认将选手排除出下一轮？')) {
+        this.socket.emit('eliminate', this.group + 1, candidate, contest => {
+          if (contest) this.contest = contest
+        })
+      }
     },
     reset () {
       if (confirm('确认清除？')) {

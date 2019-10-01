@@ -1,12 +1,14 @@
 import io from 'socket.io'
 import debug from 'debug'
-
-import { isRoot, isGuest, isJudge } from '../lib/identity'
+import range from 'loadsh/range'
+import { isRoot, isJudge } from '../lib/identity'
 import Judge from './model/judge'
 import Contest from './model/contest'
 import Score from './model/score'
 
 const dbg = debug('sc:socket')
+
+const makeContest = async c => Contest.findById(c).populate('judges', '-password').populate('evaluations.items').populate('groups.candidates')
 
 export default function (http) {
   const server = io(http)
@@ -16,7 +18,7 @@ export default function (http) {
     socket.on('auth', async (contest, judge, password, ack) => {
       dbg(`Auth: ${contest}: ${judge} with password ${password}`)
       const resp = {}
-      resp.contest = await Contest.findById(contest).populate('judges', '-password').populate('evaluations.items').populate('groups.candidates')
+      resp.contest = await makeContest(contest)
       if (!resp.contest) return ack({ error: '赛事不存在' })
       if (isJudge(judge) && !resp.contest.judges.find(j => j._id === judge)) return ack({ error: '不是本赛事评委' })
       resp.judge = await Judge.findOne({ _id: judge, password }, '-password')
@@ -61,6 +63,26 @@ export default function (http) {
           dbg('Error', e)
           ack({ e })
         }
+      }
+    })
+    socket.on('eliminate', async (round, candidate, ack) => {
+      dbg(`Eliminate: ${round}: ${candidate}`)
+      if (round > 0 && session.contest && isRoot(session.judge)) {
+        const contest = await Contest.findById(session.contest)
+        if (!contest.round) return
+        if (round >= contest.groups.length) return
+        range(round, contest.groups.length).forEach(index => {
+          const group = contest.groups[index]
+          if (!group) return
+          const found = group.candidates.indexOf(candidate)
+          if (!group.eliminated) group.eliminated = []
+          if (found >= 0) group.eliminated.push(group.candidates.splice(found, 1))
+        })
+        console.log(contest)
+        await contest.save()
+        const c = await makeContest(session.contest)
+        socket.to(session.contest).emit('contest', c)
+        ack(c)
       }
     })
   })

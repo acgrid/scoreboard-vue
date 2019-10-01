@@ -15,7 +15,8 @@ export const schema = new Schema({
   rules: { type: [String] },
   judges: { type: [{ type: String, ref: JudgeRef }], required: true, set: judges => uniq(judges.filter(judge => !!judge)), validate: j => j.length > 0 },
   evaluations: { type: [EvaluationGroup], required: true, validate: ge => ge.length > 0 },
-  groups: { type: [CandidateGroup], required: true, validate: gc => gc.length > 0 }
+  groups: { type: [CandidateGroup], required: true, validate: gc => gc.length > 0 },
+  round: { type: Boolean, default: false } // Round mode means evaluations are divided to groups above
 }, { _id: false, autoCreate: true })
 
 schema.pre('save', async function () {
