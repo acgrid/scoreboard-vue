@@ -1,6 +1,7 @@
 import os from 'os'
 import express from 'express'
 import boom from '@hapi/boom'
+import omit from 'loadsh/omit'
 import { isProd } from './env'
 import Judge from '../model/judge'
 import Evaluation from '../model/evaluation'
@@ -26,18 +27,15 @@ const MODELS = {
 router.post('/data/:model', async (req, res, next) => {
   const Model = MODELS[req.params.model]
   if (!Model) return next(boom.badData('Model is not allowed'))
+  const upsert = async doc => {
+    const m = await Model.findById(doc._id)
+    return m ? m.set(omit(doc, '_id')).save() : Model.create(doc)
+  }
   try {
     if (Array.isArray(req.body)) {
-      const models = []
-      for (let m of req.body) {
-        const model = new Model(m)
-        models.push(await model.save())
-      }
-      res.json(models)
+      res.json(await Promise.all(req.body.map(upsert)))
     } else {
-      const model = new Model(req.body)
-      await model.save()
-      res.json(model)
+      res.json(await upsert(req.body))
     }
   } catch (e) {
     next(e)

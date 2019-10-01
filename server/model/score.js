@@ -18,7 +18,6 @@ schema.pre('save', async function () {
   await fk(Contest, this.contest)
   const contest = await Contest.findById(this.contest)
   if (!contest) throw new Error('赛事不存在')
-  console.log(contest.groups)
   if (contest.judges.indexOf(this.judge) === -1) throw new Error('非赛事评委')
   if (contest.groups.reduce((candidates, group) => {
     candidates.push(...group.candidates)
