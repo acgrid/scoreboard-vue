@@ -27,6 +27,12 @@
         :sort-desc.sync="sortDesc"
         responsive="sm"
       >
+        <template v-for="col in scoreCols" v-slot:[`head(${col.key})`]>
+          <div :key="col.key">
+            {{ col.label }}
+            <template v-if="col.max"><br />({{ col.max }}分)</template>
+          </div>
+        </template>
         <template v-for="col in scoreCols" v-slot:[`cell(${col.key})`]="row">
           <div :key="col.key">
             <span v-if="readonly">{{ typeof row.value === 'number' ? row.value.toFixed(2) : '-' }}</span>
@@ -148,7 +154,7 @@ export default {
       const columns = []
       this.contest.evaluations.forEach(group => {
         group.items.forEach(item => {
-          columns.push({ key: item._id, label: `${item.name} (${item.max})`, sortable: true, min: item.min, max: item.max, step: item.step })
+          columns.push({ key: item._id, label: item.name, sortable: true, min: item.min, max: item.max, step: item.step })
         })
       })
       return columns
@@ -293,6 +299,9 @@ export default {
         width: 4em;
         margin: 0;
         padding: 0;
+      }
+      th, td{
+        white-space: nowrap;
       }
     }
     & /deep/ ol {
