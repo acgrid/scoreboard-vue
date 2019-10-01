@@ -56,6 +56,7 @@
         <li v-for="(rule, index) in contest.rules" :key="index">{{ rule }}</li>
       </ol>
       <b-row>
+        <b-col><b-button variant="danger" @click="reset">清除分数</b-button></b-col>
         <b-col><b-button variant="danger" @click="exit">切换评委</b-button></b-col>
       </b-row>
     </main>
@@ -144,7 +145,7 @@ export default {
       const columns = []
       this.contest.evaluations.forEach(group => {
         group.items.forEach(item => {
-          columns.push({ key: item._id, label: item.name, sortable: true, min: item.min, max: item.max, step: item.step })
+          columns.push({ key: item._id, label: `${item.name} (${item.max})`, sortable: true, min: item.min, max: item.max, step: item.step })
         })
       })
       return columns
@@ -253,6 +254,15 @@ export default {
         }
       })
     },
+    reset () {
+      if (confirm('确认清除？')) {
+        this.socket.emit('reset', error => {
+          if (!error) {
+            this.scores = []
+          }
+        })
+      }
+    },
     exit () {
       this.user = null
       this.judge = null
@@ -277,8 +287,7 @@ export default {
     & /deep/ table {
       margin-top: 1em;
       input[type=number]{
-        width: 3.5em;
-        font-size: 0.8em;
+        width: 4em;
         margin: 0;
         padding: 0;
       }

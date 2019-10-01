@@ -29,6 +29,16 @@ export default function (http) {
         ack(resp)
       })
     })
+    socket.on('reset', async ack => {
+      if (session.contest && isRoot(session.judge)) {
+        try {
+          await Score.remove({ contest: session.contest })
+          ack()
+        } catch (e) {
+          ack(e)
+        }
+      }
+    })
     socket.on('score', async (evaluation, candidate, score, ack) => {
       if (session.contest && isJudge(session.judge)) {
         dbg(`Score: ${session.contest}: ${session.judge} : ${candidate} : ${evaluation} : ${score}`)
