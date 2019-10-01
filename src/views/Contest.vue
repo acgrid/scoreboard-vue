@@ -56,7 +56,7 @@
         <li v-for="(rule, index) in contest.rules" :key="index">{{ rule }}</li>
       </ol>
       <b-row>
-        <b-col><b-button variant="danger" @click="reset">清除分数</b-button></b-col>
+        <b-col v-if="root"><b-button variant="danger" @click="reset">清除分数</b-button></b-col>
         <b-col><b-button variant="danger" @click="exit">切换评委</b-button></b-col>
       </b-row>
     </main>
@@ -89,7 +89,7 @@
 <script>
 import moment from 'moment'
 import socket from '../api/socket'
-import { isGuest } from '../../lib/identity'
+import { isRoot, isGuest } from '../../lib/identity'
 export default {
   name: 'Contest',
   data () {
@@ -109,6 +109,9 @@ export default {
   computed: {
     id () {
       return this.$route.params.id
+    },
+    root () {
+      return isRoot(this.user)
     },
     readonly () {
       return isGuest(this.user) || this.judge === null || this.user !== this.judge
