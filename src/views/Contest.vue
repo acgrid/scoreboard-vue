@@ -63,7 +63,7 @@
     <template v-else>
       <h2>请认证</h2>
       <b-form @submit.prevent="auth">
-        <b-form-group label="用户名：" label-for="username" description="书记员请用guest登录">
+        <b-form-group label="用户名：" label-for="username" description="主管：root 助理：guest">
           <b-form-input
             id="username"
             v-model="form.judge"
