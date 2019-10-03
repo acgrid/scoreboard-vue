@@ -34,12 +34,27 @@ export default function (http) {
     socket.on('reset', async ack => {
       if (session.contest && isRoot(session.judge)) {
         try {
-          await Score.remove({ contest: session.contest })
-          ack()
+          await Score.deleteMany({ contest: session.contest })
+          const contest = await Contest.findById(session.contest)
+          if (contest.round) {
+            contest.groups.map(group => {
+              if (group.eliminated) {
+                group.candidates.push(...group.eliminated.splice(0))
+                group.candidates.sort((a, b) => parseInt(a.substr(1)) - parseInt(b.substr(1)))
+              }
+            })
+          }
+          await contest.save()
+          const c = await makeContest(session.contest)
+          socket.to(session.contest).emit('contest', c)
+          ack({ c })
         } catch (e) {
-          ack(e)
+          ack({ e })
         }
       }
+    })
+    socket.on('scores', async (ack) => {
+      ack(await Score.find({ contest: session.contest }, 'judge evaluation candidate score modified'))
     })
     socket.on('score', async (evaluation, candidate, score, ack) => {
       if (session.contest && isJudge(session.judge)) {
@@ -76,7 +91,7 @@ export default function (http) {
           if (!group) return
           const found = group.candidates.indexOf(candidate)
           if (!group.eliminated) group.eliminated = []
-          if (found >= 0) group.eliminated.push(group.candidates.splice(found, 1))
+          if (found >= 0) group.eliminated.push(...group.candidates.splice(found, 1))
         })
         console.log(contest)
         await contest.save()

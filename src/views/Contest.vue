@@ -70,6 +70,7 @@
       </ol>
       <b-row>
         <b-col v-if="root"><b-button variant="danger" @click="reset">清除分数</b-button></b-col>
+        <b-col><b-button variant="warning" @click="reload">重新加载</b-button></b-col>
         <b-col><b-button variant="danger" @click="exit">切换评委</b-button></b-col>
       </b-row>
     </main>
@@ -289,12 +290,19 @@ export default {
     },
     reset () {
       if (confirm('确认清除？')) {
-        this.socket.emit('reset', error => {
-          if (!error) {
+        this.socket.emit('reset', resp => {
+          if (resp.c) {
+            this.contest = resp.c
             this.scores = []
           }
         })
       }
+    },
+    reload () {
+      this.socket.emit('scores', scores => {
+        console.log(scores)
+        this.scores = scores
+      })
     },
     exit () {
       this.user = null
