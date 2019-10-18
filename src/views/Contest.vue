@@ -3,7 +3,7 @@
     <main v-if="contest">
       <h1>{{ contest.name }}<br />评委评分表</h1>
       <b-row>
-        <b-col class="text-right">比赛日期：<u>{{ date.format('Y') }}</u>年<u>{{ date.format('M') }}</u>月<u>{{ date.format('D') }}</u>日</b-col>
+        <b-col class="text-right">比赛日期：<u>{{ date.format('Y') }}</u>年<u>{{ date.format('M') }}</u>月<u>{{ date.format('D') }}</u>日 {{ date.format('H:mm') }}</b-col>
       </b-row>
       <b-row>
         <b-col class="text-left">
