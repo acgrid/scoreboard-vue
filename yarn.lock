@@ -9214,6 +9214,11 @@ vue-meta@^2.2.2:
   dependencies:
     deepmerge "^4.0.0"
 
+vue-picker-mobile@^0.1.93:
+  version "0.1.93"
+  resolved "https://registry.yarnpkg.com/vue-picker-mobile/-/vue-picker-mobile-0.1.93.tgz#aa63c699d86c98cd3a4ee750aad1f818d9c98ec0"
+  integrity sha512-a6TEhe5JOa0EJtw7Zba2ENEksGEHrRwK4NTLaRSGk2oRm8h03hteOjG4npNU5H98ox6H9CuFJ8DMPEWTS0IYnA==
+
 vue-router@^3.0.3:
   version "3.1.3"
   resolved "https://registry.npm.taobao.org/vue-router/download/vue-router-3.1.3.tgz#e6b14fabc0c0ee9fda0e2cbbda74b350e28e412b"

@@ -6,7 +6,7 @@ export const schema = new Schema({
   name: { type: String, required: true, trim: true },
   description: { type: String, trim: true },
   single: { type: Number, required: true },
-  repeat: { type: Number, min: 1, default: 99 }
+  repeat: { type: Number, min: 1, default: 9 }
 }, { _id: false, autoCreate: true })
 
 export default mongoose.model(Discipline, schema)

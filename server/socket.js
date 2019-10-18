@@ -1,14 +1,15 @@
 import io from 'socket.io'
 import debug from 'debug'
-import { isRoot, isJudge } from '../lib/identity'
+import { isRoot, isJudge, canDetermine } from '../lib/identity'
 import Judge from './model/judge'
 import Candidate from './model/candidate'
 import Contest from './model/contest'
 import Score from './model/score'
+import Adjust from './model/adjust'
 
 const dbg = debug('sc:socket')
 
-const makeContest = async c => Contest.findById(c).populate('judges', '-password').populate('evaluations.items').populate('candidates')
+const makeContest = async c => Contest.findById(c).populate('judges', '-password').populate('evaluations.items').populate((await Contest.findById(c, 'candidates')).candidates.map((_, index) => `candidates.${index}`).join(' '))
 const ensureCandidate = (id, groups) => groups.findIndex(group => group.findIndex(candidate => candidate && candidate.equals ? candidate.equals(id) : candidate === id) !== -1)
 
 export default function (http) {
