@@ -6,7 +6,7 @@
         <b-col class="text-right">比赛日期：<u>{{ date.format('Y') }}</u>年<u>{{ date.format('M') }}</u>月<u>{{ date.format('D') }}</u>日 <u>{{ date.format('H:mm') }}</u></b-col>
       </b-row>
       <b-row>
-        <b-col class="text-left">
+        <b-col class="text-left" v-show="!isSummary">
           <b-form-group label="轮次：">
             <b-form-radio-group v-model="phase" :options="phases"></b-form-radio-group>
           </b-form-group>
@@ -32,7 +32,7 @@
         </template>
         <template v-slot:cell(seq)="row">
           {{ row.value }}
-          <button v-if="root && contest.round && group < contest.groups.length - 1" type="button" class="close" aria-label="Eliminate" @click="eliminate(row.item._id)">
+          <button v-if="root && group < contest.groups.length - 1" type="button" class="close" aria-label="Eliminate" @click="eliminate(row.item._id)">
             <span aria-hidden="true">&times;</span>
           </button>
         </template>
@@ -52,16 +52,18 @@
           <b-tr>
             <b-th></b-th>
             <b-th variant="info" colspan="3">选手信息</b-th>
-            <b-th v-if="currentPhase" :colspan="currentPhase.items.length">{{ currentPhase.name }}评分</b-th>
+            <b-th v-if="isSummary"></b-th>
+            <b-th v-if="isSummary" :colspan="contest.disciplines.length">扣分项</b-th>
+            <b-th v-else-if="currentPhase" :colspan="currentPhase.items.length">{{ currentPhase.name }}评分</b-th>
             <b-th></b-th>
           </b-tr>
         </template>
       </b-table>
       <b-pagination
-        v-if="rows"
+        v-if="!isSummary && contest && contest.candidates"
         v-model="page"
-        :total-rows="virtualRowCount"
-        :per-page="Math.floor(virtualRowCount / contest.candidates.length)"
+        :total-rows="contest.candidates.length"
+        :per-page="1"
         align="fill"
         size="sm"
         class="my-0"
@@ -70,6 +72,7 @@
         <li v-for="(rule, index) in contest.rules" :key="index">{{ rule }}</li>
       </ol>
       <b-row>
+        <b-col>用户：{{ user }}</b-col>
         <b-col>连接状态：{{ online ? '在线' : '离线' }}</b-col>
         <b-col><b-button variant="warning" @click="reload">重新加载</b-button></b-col>
         <b-col><b-button variant="danger" @click="exit">切换评委</b-button></b-col>
@@ -112,7 +115,7 @@ import XLSX from 'xlsx'
 import makeRange from 'loadsh/range'
 import VuePickerMobile from 'vue-picker-mobile'
 import socket from '../api/socket'
-import { isRoot, isGuest, isJudge } from '../../lib/identity'
+import { isRoot, isGuest, isJudge, canAdjust } from '../../lib/identity'
 let highlightTick = 0
 export default {
   name: 'Contest',
@@ -145,8 +148,12 @@ export default {
     root () {
       return isRoot(this.user)
     },
+    isSummary () {
+      return this.judge === null
+    },
     readonly () {
-      return isGuest(this.user) || this.judge === null || this.user !== this.judge
+      if (this.isSummary) return !canAdjust(this.user)
+      return !isJudge(this.user) || this.user !== this.judge
     },
     date () {
       if (!this.contest) return null
@@ -154,7 +161,7 @@ export default {
     },
     judges () {
       if (!this.contest) return []
-      return [{ text: '平均', value: null }, ...this.contest.judges.map((j) => {
+      return [{ text: '汇总', value: null }, ...this.contest.judges.map((j) => {
         return { text: j.name, value: j._id, disabled: isJudge(this.user) && j._id !== this.user }
       })]
     },
@@ -163,9 +170,6 @@ export default {
       return this.contest.evaluations.map((g, value) => {
         return { text: g.name, value }
       })
-    },
-    isSummary () {
-      return this.phase === -1
     },
     currentPhase () {
       if (!this.contest || this.isSummary) return
@@ -176,24 +180,34 @@ export default {
       }
     },
     highlightEnabled () {
-      return this.currentPhase && (this.currentPhase.promote || this.currentPhase.eliminate)
+      return this.isSummary || (this.currentPhase.promote || this.currentPhase.eliminate)
     },
-    virtualRowCount () {
-      return this.contest ? this.contest.candidates.length : 0
+    allCandidates () { // all
+      return this.contest.candidates.reduce((candidates, group) => {
+        candidates.push(...group)
+        return candidates
+      }, [])
     },
     scoreCols () {
       if (!this.contest) return []
       const columns = []
-      this.currentPhase.items.forEach(item => {
-        columns.push({ ...item, key: item._id, label: item.name, sortable: true })
-      })
+      if (this.isSummary) {
+        this.contest.disciplines.forEach(item => {
+          columns.push({ ...item, key: item._id, label: item.name, sortable: true })
+        })
+      } else {
+        this.currentPhase.items.forEach(item => {
+          columns.push({ ...item, key: item._id, label: item.name, sortable: true })
+        })
+      }
       return columns
     },
     cols () {
       if (!this.contest) return []
       const columns = [{ key: 'index', label: '行号' }, { key: 'seq', label: '参赛号', sortable: true }, { key: 'name', label: '选手名' }, { key: 'nickname', label: '昵称' }]
+      if (this.isSummary) columns.push({ key: 'avg', label: '去极端均分'})
       columns.push(...this.scoreCols)
-      columns.push({ key: 'total', label: '总分', sortable: true })
+      columns.push({ key: 'total', label: this.isSummary ? '最终分' : '评委总分', sortable: true })
       return columns
     },
     rows () {
@@ -201,22 +215,31 @@ export default {
       try {
         const index = this.page - 1
         const candidates = this.contest.candidates[index].map(candidate => {
-          let hasTotal = 0
-          this.currentPhase.items.forEach(item => {
-            if (this.judge) {
-              const s = this.scores.find(s => s.judge === this.judge && s.candidate === candidate._id && s.evaluation === item._id)
-              candidate[item._id] = s ? s.score : null
-            } else {
-              const s = this.scores.filter(s => s.candidate === candidate._id && s.evaluation === item._id)
-              candidate[item._id] = s.length ? s.reduce((sum, s) => sum + s.score, 0) / s.length : null
-            }
-            if (candidate[item._id] === null) {
-              hasTotal = false
-            } else {
-              if (hasTotal !== false) hasTotal += candidate[item._id]
-            }
-          })
-          candidate.total = hasTotal || null
+          let total = 0
+          if (this.isSummary) {
+            total = candidate.avg = 5 // TODO: Check all, this.scores.filter(s => s.candidate === candidate._id)
+            this.contest.disciplines.forEach(discipline => {
+              const a = this.adjusts.find(a => a.candidate === candidate._id && a.discipline === discipline._id)
+              candidate[discipline._id] = a ? a.value : null
+              if (a) total -= a.value
+            })
+          } else {
+            this.currentPhase.items.forEach(item => {
+              if (this.judge) {
+                const s = this.scores.find(s => s.judge === this.judge && s.candidate === candidate._id && s.evaluation === item._id)
+                candidate[item._id] = s ? s.score : null
+              } else { // Unused
+                const s = this.scores.filter(s => s.candidate === candidate._id && s.evaluation === item._id)
+                candidate[item._id] = s.length ? s.reduce((sum, s) => sum + s.score, 0) / s.length : null
+              }
+              if (candidate[item._id] === null) {
+                total = false
+              } else {
+                if (total !== false) total += candidate[item._id]
+              }
+            })
+          }
+          candidate.total = total || null
           return candidate
         })
         return candidates
@@ -227,7 +250,7 @@ export default {
     },
     pickerList () {
       if (this.focusEvaluation) return this.focusEvaluation.choices.map(c => ({ label: `${c.name} (${(c.score / this.contest.multiplier).toFixed(1)})`, value: c.score }))
-      if (this.focusAdjust) return makeRange(0, this.focusAdjust.repeat).map(x => (x * this.focusAdjust.single / this.contest.multiplier).toFixed(1))
+      if (this.focusAdjust) return makeRange(0, this.focusAdjust.repeat).map(a => ({ label: (a * this.focusAdjust.single / this.contest.multiplier).toFixed(1), value: a * this.focusAdjust.single } ))
       return [{ label: '', value: '' }]
     },
     pickerValue () {
@@ -255,12 +278,13 @@ export default {
     error (msg, title = '错误') {
       this.$bvToast.toast(msg, { title, variant: 'danger', solid: true })
     },
-    parse (score) {
+    parse (single, collection) {
       if (!this.user) return
-      const index = this.scores.findIndex(s => s.judge === score.judge && s.candidate === score.candidate && s.evaluation === score.evaluation)
-      index === -1 ? this.scores.push(score) : this.$set(this.scores, index, score)
+      const index = collection.findIndex(s => s.judge === single.judge && s.candidate === single.candidate && s.evaluation === single.evaluation)
+      index === -1 ? collection.push(single) : this.$set(collection, index, single)
     },
     highlight (row) {
+      return
       if (this.highlightEnabled && row.total) {
         const rank = this.rows.filter(r => r.total && r.total > row.total).length + 1
         const { promote, eliminate } = this.currentPhase
@@ -290,28 +314,45 @@ export default {
         this.contest = resp.contest
         this.judge = this.contest.judges.find(j => j._id === this.user) ? this.user : this.contest.judges[0]._id
         this.scores = resp.scores
-        this.socket.on('score', this.parse)
+        this.adjusts = resp.adjusts
+        this.socket.on('score', score => this.parse(score, this.scores))
         this.socket.on('contest', contest => { this.contest = contest })
       })
     },
     focus (row) {
+      if (this.readonly) return
       this[this.isSummary ? 'focusAdjust' : 'focusEvaluation'] = row.field
       this.focusCandidate = row.item
       this.choosing = true
     },
     update (res, type) {
+      const postUpdate = () => {
+        this.focusCandidate = null
+        this.focusEvaluation = null
+        this.focusAdjust = null
+        this.choosing = false
+      }
       if (type === 'confirm') {
-        this.socket.emit('score', this.focusEvaluation._id, this.focusCandidate._id, res[0].value, resp => {
-          if (resp.e) {
-            this.error('上传评分失败，请重试')
-          } else if (resp.s) {
-            this.focusCandidate = null
-            this.focusEvaluation = null
-            this.focusAdjust = null
-            this.choosing = false
-            this.parse(resp.s)
-          }
-        })
+        const score = res[0].value
+        if (this.focusEvaluation) {
+          this.socket.emit('score', this.focusEvaluation._id, this.focusCandidate._id, score, resp => {
+            if (resp.e) {
+              this.error('上传评分失败，请重试')
+            } else if (resp.s) {
+              postUpdate()
+              this.parse(resp.s, this.scores)
+            }
+          })
+        } else if (this.focusAdjust) {
+          this.socket.emit('adjust', this.focusAdjust._id, this.focusCandidate._id, score, resp => {
+            if (resp.e) {
+              this.error('上传扣分失败，请重试')
+            } else if (resp.a) {
+              postUpdate()
+              this.parse(resp.a, this.adjusts)
+            }
+          })
+        }
       }
     },
     eliminate (candidate) {
@@ -390,6 +431,7 @@ export default {
       this.judge = null
       this.contest = null
       this.scores = []
+      this.adjusts = []
       this.group = 0
       this.page = 1
       this.form.judge = ''

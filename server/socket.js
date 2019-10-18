@@ -9,7 +9,7 @@ import Adjust from './model/adjust'
 
 const dbg = debug('sc:socket')
 
-const makeContest = async c => Contest.findById(c).populate('judges', '-password').populate('evaluations.items').populate((await Contest.findById(c, 'candidates')).candidates.map((_, index) => `candidates.${index}`).join(' '))
+const makeContest = async c => Contest.findById(c).populate('judges', '-password').populate('evaluations.items').populate('disciplines').populate((await Contest.findById(c, 'candidates')).candidates.map((_, index) => `candidates.${index}`).join(' '))
 const ensureCandidate = (id, groups) => groups.findIndex(group => group.findIndex(candidate => candidate && candidate.equals ? candidate.equals(id) : candidate === id) !== -1)
 
 export default function (http) {
@@ -30,6 +30,7 @@ export default function (http) {
         session.judge = judge
         session.contest = contest
         resp.scores = await Score.find({ contest }, 'judge evaluation candidate score modified')
+        resp.adjusts = await Adjust.find({ contest }, 'discipline candidate value')
         ack(resp)
       })
     })
@@ -107,6 +108,25 @@ export default function (http) {
         const c = await makeContest(session.contest)
         socket.to(session.contest).emit('contest', c)
         ack(c)
+      }
+    })
+    socket.on('adjust', async (discipline, candidate, value, ack) => {
+      if (session.contest && canDetermine(session.judge)) {
+        const primary = { contest: session.contest, candidate, discipline }
+        try {
+          let a = await Adjust.findOne(primary)
+          if (a) {
+            a.value = value
+            await a.save()
+          } else {
+            a = await Adjust.create({ ...primary, value })
+          }
+          socket.to(session.contest).emit('adjust', a)
+          ack({ a })
+        } catch (e) {
+          dbg('Error', e)
+          ack({ e })
+        }
       }
     })
   })
