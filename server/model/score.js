@@ -6,7 +6,7 @@ import fk from './traits/foreign-key'
 export const schema = new Schema({
   contest: { type: String, ref: ContestRef, required: true },
   judge: { type: String, ref: JudgeRef, required: true },
-  candidate: { type: String, ref: CandidateRef, required: true },
+  candidate: { type: mongoose.Types.ObjectId, ref: CandidateRef, required: true },
   evaluation: { type: String, ref: EvaluationRef, required: true },
   score: { type: Number, required: true },
   modified: { type: [Number], default: [] }
@@ -19,8 +19,8 @@ schema.pre('save', async function () {
   const contest = await Contest.findById(this.contest)
   if (!contest) throw new Error('赛事不存在')
   if (contest.judges.indexOf(this.judge) === -1) throw new Error('非赛事评委')
-  if (contest.groups.reduce((candidates, group) => {
-    candidates.push(...group.candidates)
+  if (contest.candidates.reduce((candidates, group) => {
+    candidates.push(...group)
     return candidates
   }, []).indexOf(this.candidate) === -1) throw new Error('非参赛选手')
   if (contest.evaluations.reduce((evaluations, group) => {

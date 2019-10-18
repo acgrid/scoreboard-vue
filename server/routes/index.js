@@ -5,6 +5,7 @@ import omit from 'loadsh/omit'
 import { isProd } from './env'
 import Judge from '../model/judge'
 import Evaluation from '../model/evaluation'
+import Discipline from '../model/discipline'
 import Candidate from '../model/candidate'
 import Contest from '../model/contest'
 
@@ -20,6 +21,7 @@ router.get('/', (_, res) => {
 const MODELS = {
   judge: Judge,
   evaluation: Evaluation,
+  discipline: Discipline,
   candidate: Candidate,
   contest: Contest
 }
