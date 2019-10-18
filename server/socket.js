@@ -1,14 +1,15 @@
 import io from 'socket.io'
 import debug from 'debug'
-import range from 'loadsh/range'
 import { isRoot, isJudge } from '../lib/identity'
 import Judge from './model/judge'
+import Candidate from './model/candidate'
 import Contest from './model/contest'
 import Score from './model/score'
 
 const dbg = debug('sc:socket')
 
-const makeContest = async c => Contest.findById(c).populate('judges', '-password').populate('evaluations.items').populate('groups.candidates')
+const makeContest = async c => Contest.findById(c).populate('judges', '-password').populate('evaluations.items').populate('candidates')
+const ensureCandidate = (id, groups) => groups.findIndex(group => group.findIndex(candidate => candidate && candidate.equals ? candidate.equals(id) : candidate === id) !== -1)
 
 export default function (http) {
   const server = io(http)
@@ -31,24 +32,31 @@ export default function (http) {
         ack(resp)
       })
     })
-    socket.on('reset', async ack => {
+    socket.on('populate', async (groups, ack) => {
+      console.log(session, groups)
       if (session.contest && isRoot(session.judge)) {
         try {
           await Score.deleteMany({ contest: session.contest })
           const contest = await Contest.findById(session.contest)
-          if (contest.round) {
-            contest.groups.map(group => {
-              if (group.eliminated) {
-                group.candidates.push(...group.eliminated.splice(0))
-                group.candidates.sort((a, b) => parseInt(a.substr(1)) - parseInt(b.substr(1)))
-              }
-            })
+          contest.promotions = []
+          contest.eliminations = []
+          if (groups) { // populate
+            if (contest.candidates && contest.candidates.length) {
+              await Promise.all(contest.candidates.map(async groups => Candidate.deleteMany({ _id: { $in: groups } })))
+            }
+            contest.candidates = await Promise.all(groups.map(async group => {
+              return Promise.all(group.map(async candidate => {
+                return (await Candidate.create(candidate))._id
+              }))
+            }))
+            console.log(contest.candidates)
           }
           await contest.save()
           const c = await makeContest(session.contest)
           socket.to(session.contest).emit('contest', c)
           ack({ c })
         } catch (e) {
+          console.error(e)
           ack({ e })
         }
       }

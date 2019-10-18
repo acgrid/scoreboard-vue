@@ -69,9 +69,13 @@
         <li v-for="(rule, index) in contest.rules" :key="index">{{ rule }}</li>
       </ol>
       <b-row>
-        <b-col v-if="root"><b-button variant="danger" @click="reset">清除分数</b-button></b-col>
+        <b-col>连接状态：{{ online ? '在线' : '离线' }}</b-col>
         <b-col><b-button variant="warning" @click="reload">重新加载</b-button></b-col>
         <b-col><b-button variant="danger" @click="exit">切换评委</b-button></b-col>
+      </b-row>
+      <b-row v-if="root" style="margin-top: 1em">
+        <b-col><b-form-file v-model="file" :state="Boolean(file)" browse-text="选择Excel文件" placeholder="导入选手名单并清除分数" drop-placeholder="可在此拖入文件..."></b-form-file></b-col>
+        <b-col><b-button variant="danger" @click="reset">清除分数</b-button></b-col>
       </b-row>
     </main>
     <template v-else>
@@ -102,6 +106,8 @@
 </template>
 <script>
 import moment from 'moment'
+import XLSX from 'xlsx'
+import makeRange from 'loadsh/range'
 import socket from '../api/socket'
 import { isRoot, isGuest } from '../../lib/identity'
 let highlightTick = 0
@@ -110,15 +116,18 @@ export default {
   data () {
     return {
       socket,
+      online: false,
       user: null,
       judge: null, // NULL i.e averaged
       contest: null,
       scores: [],
+      adjusts: [],
       group: 0, // current group
       page: 1,
       sortBy: 'seq',
       sortDesc: false,
-      form: { judge: this.$route.query.judge || '', password: '' }
+      form: { judge: this.$route.query.judge || '', password: '' },
+      file: null
     }
   },
   computed: {
@@ -222,6 +231,11 @@ export default {
       this.auth()
     }
   },
+  watch: {
+    file () {
+      if (this.file) this.populate()
+    }
+  },
   methods: {
     error (msg, title = '错误') {
       this.$bvToast.toast(msg, { title, variant: 'danger', solid: true })
@@ -249,11 +263,19 @@ export default {
       if (highlightTick++ % 2) return 'table-secondary'
     },
     auth () {
+      this.online = false
       this.socket.emit('auth', this.id, this.form.judge, this.form.password, resp => {
+        console.log(resp)
         if (!resp || !resp.judge || !resp.contest || resp.error) {
           return this.error(resp.error || '认证错误')
         }
-        if (!this.user) this.socket.on('reconnect', this.auth) // keep auth if disconnected accidently
+        if (!this.user) {
+          this.socket.on('reconnect', this.auth) // keep auth if disconnected accidently
+          this.socket.on('disconnect', () => {
+            this.online = false
+          })
+        }
+        this.online = true
         localStorage.setItem('judge', this.form.judge)
         localStorage.setItem('password', this.form.password)
         this.user = resp.judge._id
@@ -289,13 +311,60 @@ export default {
       }
     },
     reset () {
-      if (confirm('确认清除？')) {
-        this.socket.emit('reset', resp => {
-          if (resp.c) {
-            this.contest = resp.c
-            this.scores = []
+      this.file = null
+      this.populate()
+    },
+    populate () {
+      const error = msg => {
+        this.file = null
+        this.error(msg)
+      }
+      const execute = groups => {
+        if (confirm('该操作将清除全部已有的评分数据，是否确认？')) {
+          this.socket.emit('populate', groups, resp => {
+            if (resp.c) {
+              this.$bvToast.toast('清除完毕', { title: '重置数据', variant: 'success', solid: true })
+              this.contest = resp.c
+              this.scores = []
+              this.adjusts = []
+            }
+          })
+        }
+        this.file = null
+      }
+      const getCellValue = (sheet, column, row) => {
+        const cell = sheet[`${column}${row + 1}`]
+        return cell ? cell.w : null
+      }
+      if (this.file) {
+        try {
+          const reader = new FileReader()
+          reader.onload = ev => {
+            const workbook = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' })
+            if (workbook.SheetNames.length !== 1) return error(`检测到Excel表格中有多个工作表，请删除多余的工作表再试一次。`)
+            const sheet = workbook.Sheets[workbook.SheetNames[0]]
+            const range = XLSX.utils.decode_range(sheet['!ref'])
+            if (range.s.r === range.e.r) return error(`表格只有一行数据，请不要删除标题行`)
+            const groups = []
+            makeRange(range.s.r + 1, range.e.r + 1).forEach(row => {
+              let group = getCellValue(sheet, 'A', row)
+              if (Number.isNaN(group) || group <= 0) return
+              group--
+              const name = getCellValue(sheet, 'B', row)
+              const nickname = getCellValue(sheet, 'C', row)
+              if (!name || !nickname) return
+              if (!groups[group]) groups[group] = []
+              groups[group].push({ name, nickname })
+            })
+            execute(groups)
           }
-        })
+          reader.readAsArrayBuffer(this.file)
+        } catch (e) {
+          console.error(e)
+          error(e)
+        }
+      } else {
+        execute()
       }
     },
     reload () {
