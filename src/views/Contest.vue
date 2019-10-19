@@ -171,7 +171,6 @@ export default {
     },
     readonly () {
       if (this.isRoot) return false
-      if (this.isSummary) return !canAdjust(this.user)
       return !isJudge(this.user) || this.user !== this.judge
     },
     date () {
@@ -431,10 +430,12 @@ export default {
       })
     },
     focus (row) {
-      if (this.readonly) return
-      this[Array.isArray(row.field.choices) ? 'focusEvaluation' : 'focusAdjust'] = row.field
-      this.focusCandidate = row.item
-      this.choosing = true
+      const type = Array.isArray(row.field.choices) ? 'focusEvaluation' : 'focusAdjust'
+      if (!this.readonly || (type === 'focusAdjust' && this.canAdjust)) {
+        this[type] = row.field
+        this.focusCandidate = row.item
+        this.choosing = true
+      }
     },
     update (res, type) {
       const postUpdate = () => {
