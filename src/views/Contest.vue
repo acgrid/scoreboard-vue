@@ -6,12 +6,12 @@
         <b-col class="text-right">比赛日期：<u>{{ date.format('Y') }}</u>年<u>{{ date.format('M') }}</u>月<u>{{ date.format('D') }}</u>日 <u>{{ date.format('H:mm') }}</u></b-col>
       </b-row>
       <b-row>
-        <b-col class="text-left" v-show="!isSummary">
+        <b-col class="text-left">
           <b-form-group label="轮次：">
             <b-form-radio-group v-model="phase" :options="phases"></b-form-radio-group>
           </b-form-group>
         </b-col>
-        <b-col v-if="judges" class="text-left">
+        <b-col v-if="judges" class="text-left" v-show="!isSummary">
           <b-form-group label="评委：">
             <b-form-select v-model="judge" :options="judges" size="sm"></b-form-select>
           </b-form-group>
@@ -44,6 +44,9 @@
         </template>
         <template v-for="col in scoreCols" v-slot:[`cell(${col.key})`]="row">
           <div :key="col.key" @click="focus(row)">{{ typeof row.value === 'number' ? (row.value / contest.multiplier).toFixed(2) : '-' }}</div>
+        </template>
+        <template v-slot:cell(avg)="row">
+          <b>{{ typeof row.value === 'number' ? (row.value / contest.multiplier).toFixed(2) : '-' }}</b>
         </template>
         <template v-slot:cell(total)="row">
           <b>{{ typeof row.value === 'number' ? (row.value / contest.multiplier).toFixed(2) : '-' }}</b>
@@ -112,11 +115,21 @@
 <script>
 import moment from 'moment'
 import XLSX from 'xlsx'
+import sum from 'loadsh/sum'
 import makeRange from 'loadsh/range'
 import VuePickerMobile from 'vue-picker-mobile'
 import socket from '../api/socket'
 import { isRoot, isGuest, isJudge, canAdjust } from '../../lib/identity'
 let highlightTick = 0
+const safeSplice = (arr, rank) => {
+  while(rank) {
+    let spliced
+    do {
+      spliced = arr.splice(rank, 1)
+    } while (arr.length && spliced === arr[0])
+    rank > 0 ? rank-- : rank++
+  }
+}
 export default {
   name: 'Contest',
   components: { VuePickerMobile },
@@ -149,7 +162,7 @@ export default {
       return isRoot(this.user)
     },
     isSummary () {
-      return this.judge === null
+      return this.phase === null
     },
     readonly () {
       if (this.isSummary) return !canAdjust(this.user)
@@ -161,15 +174,15 @@ export default {
     },
     judges () {
       if (!this.contest) return []
-      return [{ text: '汇总', value: null }, ...this.contest.judges.map((j) => {
+      return [{ text: '平均', value: null }, ...this.contest.judges.map((j) => {
         return { text: j.name, value: j._id, disabled: isJudge(this.user) && j._id !== this.user }
       })]
     },
     phases () {
       if (!this.contest) return []
-      return this.contest.evaluations.map((g, value) => {
+      return [{ text: '汇总', value: null }, ...this.contest.evaluations.map((g, value) => {
         return { text: g.name, value }
-      })
+      })]
     },
     currentPhase () {
       if (!this.contest || this.isSummary) return
@@ -183,10 +196,39 @@ export default {
       return this.isSummary || (this.currentPhase.promote || this.currentPhase.eliminate)
     },
     allCandidates () { // all
-      return this.contest.candidates.reduce((candidates, group) => {
+      return this.contest ? this.contest.candidates.reduce((candidates, group) => {
         candidates.push(...group)
         return candidates
-      }, [])
+      }, []) : []
+    },
+    allEvaluations () {
+      return this.contest ? this.contest.evaluations.reduce((evaluations, group) => {
+        evaluations.push(...group.items.map(e => e._id))
+        return evaluations
+      }, []) : []
+    },
+    averaged () {
+      try {
+      return this.allCandidates.reduce((carry, candidate) => {
+        const id = candidate._id
+        const scores = this.allEvaluations.reduce((coll, e) => {
+          coll[e] = this.scores.filter(s => s.candidate === id && s.evaluation === e && s.score).map(s => s.score)
+          return coll
+        }, {})
+        Object.keys(scores).forEach(e => {
+          if (scores[e].length !== this.contest.judges.length) {
+            scores[e] = null
+            return
+          }
+          scores[e].sort((a, b) => b - a)
+          scores[e].splice(0, this.contest.highest)
+          scores[e].splice(-this.contest.lowest)
+          scores[e] = sum(scores[e]) / scores[e].length
+        })
+        carry[id] = scores
+        return carry
+      }, {})
+      } catch (e) { console.error(e) }
     },
     scoreCols () {
       if (!this.contest) return []
@@ -205,7 +247,7 @@ export default {
     cols () {
       if (!this.contest) return []
       const columns = [{ key: 'index', label: '行号' }, { key: 'seq', label: '参赛号', sortable: true }, { key: 'name', label: '选手名' }, { key: 'nickname', label: '昵称' }]
-      if (this.isSummary) columns.push({ key: 'avg', label: '去极端均分'})
+      if (this.isSummary) columns.push({ key: 'avg', label: '加权去重均分', sortable: true })
       columns.push(...this.scoreCols)
       columns.push({ key: 'total', label: this.isSummary ? '最终分' : '评委总分', sortable: true })
       return columns
@@ -217,20 +259,30 @@ export default {
         const candidates = this.contest.candidates[index].map(candidate => {
           let total = 0
           if (this.isSummary) {
-            total = candidate.avg = 5 // TODO: Check all, this.scores.filter(s => s.candidate === candidate._id)
+            const averages = this.averaged[candidate._id]
+            for (let e in averages) {
+              const s = averages[e]
+              if (s === null) {
+                total = null
+                break
+              }
+              // weight
+              const weight = this.contest.evaluations.find(es => es.items.find(ei => ei._id === e)).weight
+              total += s * weight
+            }
+            candidate.avg = total
             this.contest.disciplines.forEach(discipline => {
               const a = this.adjusts.find(a => a.candidate === candidate._id && a.discipline === discipline._id)
               candidate[discipline._id] = a ? a.value : null
-              if (a) total -= a.value
+              if (a) total += a.value
             })
           } else {
             this.currentPhase.items.forEach(item => {
-              if (this.judge) {
+              if (this.judge) { // individual
                 const s = this.scores.find(s => s.judge === this.judge && s.candidate === candidate._id && s.evaluation === item._id)
                 candidate[item._id] = s ? s.score : null
-              } else { // Unused
-                const s = this.scores.filter(s => s.candidate === candidate._id && s.evaluation === item._id)
-                candidate[item._id] = s.length ? s.reduce((sum, s) => sum + s.score, 0) / s.length : null
+              } else { // averaged
+                candidate[item._id] = this.averaged[candidate._id][item._id]
               }
               if (candidate[item._id] === null) {
                 total = false
