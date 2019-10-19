@@ -353,6 +353,7 @@ export default {
       if (this.isDetermined(false, row._id)) return 'table-danger'
       if (this.highlightEnabled && row.total) {
         const rankings = uniq(this.rows.map(r => r.total))
+        rankings.sort((a, b) => b - a)
         if (this.isSummary && this.contest.borders) {
           const headers = ['table-success', 'table-info', 'table-warning']
           for (let index in this.contest.borders) {
