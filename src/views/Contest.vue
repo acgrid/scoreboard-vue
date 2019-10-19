@@ -426,6 +426,7 @@ export default {
         this.scores = resp.scores
         this.adjusts = resp.adjusts
         this.socket.on('score', score => this.parse(score, this.scores, matchScore))
+        this.socket.on('adjust', adjust => this.parse(adjust, this.adjusts, matchAdjust))
         this.socket.on('contest', contest => { this.contest = contest })
       })
     },
