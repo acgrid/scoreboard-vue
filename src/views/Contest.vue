@@ -319,6 +319,8 @@ export default {
                 if (a) {
                   candidate[discipline._id] = a.value
                   if (total !== false) total += a.value
+                } else {
+                  candidate[discipline._id] = null
                 }
               })
             }
