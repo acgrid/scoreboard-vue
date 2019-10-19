@@ -42,7 +42,7 @@
           </div>
         </template>
         <template v-for="col in scoreCols" v-slot:[`cell(${col.key})`]="row">
-          <div :key="col.key" @click="focus(row)">{{ typeof row.value === 'number' ? (row.value / contest.multiplier).toFixed(2) : '-' }}</div>
+          <div :key="col.key" @click="focus(row)">{{ typeof row.value === 'number' ? (row.value / contest.multiplier).toFixed(2) : '---' }}</div>
         </template>
         <template v-slot:cell(avg)="row">
           <b>{{ typeof row.value === 'number' ? (row.value / contest.multiplier).toFixed(2) : '-' }}</b>
@@ -79,7 +79,7 @@
         <b-col><b-button variant="warning" @click="reload">重新加载</b-button></b-col>
         <b-col><b-button variant="danger" @click="exit">切换评委</b-button></b-col>
       </b-row>
-      <b-row v-if="root" style="margin-top: 1em">
+      <b-row v-if="isRoot" style="margin-top: 1em">
         <b-col><b-form-file v-model="file" :state="Boolean(file)" browse-text="选择Excel文件" placeholder="导入选手名单并清除分数" drop-placeholder="可在此拖入文件..."></b-form-file></b-col>
         <b-col><b-button variant="danger" @click="reset">清除分数</b-button></b-col>
       </b-row>
@@ -158,7 +158,7 @@ export default {
     id () {
       return this.$route.params.id
     },
-    root () {
+    isRoot () {
       return isRoot(this.user)
     },
     canDetermine () {
@@ -167,7 +167,11 @@ export default {
     isSummary () {
       return this.phase === null
     },
+    isJudge () {
+      return isJudge(this.user)
+    },
     readonly () {
+      if (this.isRoot) return false
       if (this.isSummary) return !canAdjust(this.user)
       return !isJudge(this.user) || this.user !== this.judge
     },
@@ -412,7 +416,7 @@ export default {
       if (type === 'confirm') {
         const score = res[0].value
         if (this.focusEvaluation) {
-          this.socket.emit('score', this.focusEvaluation._id, this.focusCandidate._id, score, resp => {
+          this.socket.emit('score', this.focusEvaluation._id, this.focusCandidate._id, score, this.isRoot ? this.judge : null, resp => {
             if (resp.e) {
               this.error('上传评分失败，请重试')
             } else if (resp.s) {

@@ -66,12 +66,13 @@ export default function (http) {
     socket.on('scores', async (ack) => {
       ack(await Score.find({ contest: session.contest }, 'judge evaluation candidate score modified'))
     })
-    socket.on('score', async (evaluation, candidate, score, ack) => {
-      if (session.contest && isJudge(session.judge)) {
-        dbg(`Score: ${session.contest}: ${session.judge} : ${candidate} : ${evaluation} : ${score}`)
+    socket.on('score', async (evaluation, candidate, score, judge, ack) => {
+      if (!isRoot(session.judge)) judge = session.judge
+      if (session.contest && isJudge(judge)) {
+        dbg(`Score: ${session.contest}: ${judge} : ${candidate} : ${evaluation} : ${score}`)
         if (!evaluation || !candidate || Number.isNaN(score)) return
         let s
-        const primary = { ...session, evaluation, candidate }
+        const primary = { contest: session.contest, judge, evaluation, candidate }
         const pervious = await Score.findOne(primary)
         try {
           if (pervious) {
