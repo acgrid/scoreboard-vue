@@ -30,7 +30,7 @@ export default function (http) {
         session.judge = judge
         session.contest = contest
         resp.scores = await Score.find({ contest }, 'judge evaluation candidate score modified')
-        resp.adjusts = await Adjust.find({ contest }, 'discipline candidate value')
+        resp.adjusts = await Adjust.find({ contest }, 'discipline candidate phase value')
         ack(resp)
       })
     })
@@ -107,9 +107,10 @@ export default function (http) {
         ack(c)
       }
     })
-    socket.on('adjust', async (discipline, candidate, value, ack) => {
+    socket.on('adjust', async (discipline, candidate, phase, value, ack) => {
       if (session.contest && canDetermine(session.judge)) {
-        const primary = { contest: session.contest, candidate, discipline }
+        dbg(`Adjust: Phase ${phase} ${discipline}: ${candidate} ${value}`)
+        const primary = { contest: session.contest, discipline, candidate, phase }
         try {
           let a = await Adjust.findOne(primary)
           if (a) {

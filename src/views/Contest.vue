@@ -47,6 +47,9 @@
         <template v-slot:cell(avg)="row">
           <b>{{ typeof row.value === 'number' ? (row.value / contest.multiplier).toFixed(2) : '-' }}</b>
         </template>
+        <template v-slot:cell(adjust)="row">
+          <b>{{ typeof row.value === 'number' ? (row.value / contest.multiplier).toFixed(2) : '-' }}</b>
+        </template>
         <template v-slot:cell(total)="row">
           <b>{{ typeof row.value === 'number' ? (row.value / contest.multiplier).toFixed(2) : '-' }}</b>
         </template>
@@ -54,9 +57,9 @@
           <b-tr>
             <b-th></b-th>
             <b-th variant="info" colspan="2">选手信息</b-th>
-            <b-th v-if="isSummary"></b-th>
-            <b-th v-if="isSummary" :colspan="contest.disciplines.length">扣分项</b-th>
-            <b-th v-else-if="currentPhase" :colspan="currentPhase.items.length">{{ currentPhase.name }}评分</b-th>
+            <b-th v-if="isSummary" colspan="2">分数汇总</b-th>
+            <b-th v-if="currentPhase" :colspan="currentPhase.items.length">{{ currentPhase.name }}评分</b-th>
+            <b-th v-if="!isSummary && !isJudge" :colspan="contest.disciplines.length">扣分项</b-th>
             <b-th></b-th>
           </b-tr>
         </template>
@@ -130,6 +133,8 @@ const safeSplice = (arr, rank) => {
     rank > 0 ? rank-- : rank++
   }
 }
+const matchScore = single => (s => s.judge === single.judge && s.candidate === single.candidate && s.evaluation === single.evaluation)
+const matchAdjust =  single => (a => a.phase === single.phase && a.candidate === single.candidate && a.discipline === single.discipline)
 export default {
   name: 'Contest',
   components: { VuePickerMobile },
@@ -169,6 +174,9 @@ export default {
     },
     isJudge () {
       return isJudge(this.user)
+    },
+    canAdjust () {
+      return canAdjust(this.user) && !this.isSummary
     },
     readonly () {
       if (this.isRoot) return false
@@ -242,22 +250,25 @@ export default {
       if (!this.contest) return []
       const columns = []
       if (this.isSummary) {
-        this.contest.disciplines.forEach(item => {
-          columns.push({ ...item, key: item._id, label: item.name, sortable: true })
-        })
+        columns.push({ key: 'avg', label: '加权平均分', sortable: true })
+        columns.push({ key: 'adjust', label: '总扣分', sortable: true })
       } else {
         this.currentPhase.items.forEach(item => {
           columns.push({ ...item, key: item._id, label: item.name, sortable: true })
         })
+        if (!this.isJudge) {
+          this.contest.disciplines.forEach(item => {
+            columns.push({ ...item, key: item._id, label: item.name, sortable: true })
+          })
+        }
       }
       return columns
     },
     cols () {
       if (!this.contest) return []
       const columns = [{ key: 'index', label: '行号' }, { key: 'seq', label: '参赛号', sortable: true }, { key: 'name', label: '姓名' }]
-      if (this.isSummary) columns.push({ key: 'avg', label: '加权去重均分', sortable: true })
       columns.push(...this.scoreCols)
-      columns.push({ key: 'total', label: this.isSummary ? '最终分' : '评委总分', sortable: true })
+      columns.push({ key: 'total', label: this.isSummary ? '最终分' : (this.isJudge ? '评委总分' : '环节总分'), sortable: true })
       return columns
     },
     rows () {
@@ -284,11 +295,15 @@ export default {
               total += s * weight
             }
             candidate.avg = total
+            let adjust = 0
             this.contest.disciplines.forEach(discipline => {
               const a = this.adjusts.find(a => a.candidate === candidate._id && a.discipline === discipline._id)
-              candidate[discipline._id] = a ? a.value : null
-              if (a) total += a.value
+              if (a) {
+                adjust += a.value
+              }
             })
+            candidate.adjust = adjust
+            candidate.total = candidate.avg ? candidate.avg + adjust : null
           } else {
             this.currentPhase.items.forEach(item => {
               if (this.judge) { // individual
@@ -303,8 +318,17 @@ export default {
                 if (total !== false) total += candidate[item._id]
               }
             })
+            if (!this.isJudge) {
+              this.contest.disciplines.forEach(discipline => {
+                const a = this.adjusts.find(a => a.candidate === candidate._id && a.discipline === discipline._id && a.phase === this.phase)
+                if (a) {
+                  candidate[discipline._id] = a.value
+                  if (total !== false) total += a.value
+                }
+              })
+            }
+            candidate.total = total || null
           }
-          candidate.total = total || null
           return candidate
         })
         return candidates
@@ -337,28 +361,35 @@ export default {
   watch: {
     file () {
       if (this.file) this.populate()
+    },
+    choosing (newValue) {
+      if (!newValue) {
+        this.focusEvaluation = null
+        this.focusAdjust = null
+        this.focusCandidate = null
+      }
     }
   },
   methods: {
     error (msg, title = '错误') {
       this.$bvToast.toast(msg, { title, variant: 'danger', solid: true })
     },
-    parse (single, collection) {
+    parse (single, collection, matches) {
       if (!this.user) return
-      const index = collection.findIndex(s => s.judge === single.judge && s.candidate === single.candidate && s.evaluation === single.evaluation)
+      const index = collection.findIndex(matches(single))
       index === -1 ? collection.push(single) : this.$set(collection, index, single)
     },
     highlight (row) {
       if (this.isDetermined(true, row._id)) return 'table-success'
       if (this.isDetermined(false, row._id)) return 'table-danger'
       if (this.highlightEnabled && row.total) {
-        const rankings = uniq(this.rows.map(r => r.total))
+        const rankings = uniq(this.rows.map(r => r.total).filter(s => s > 0))
         rankings.sort((a, b) => b - a)
         if (this.isSummary && this.contest.borders) {
           const headers = ['table-success', 'table-info', 'table-warning']
           for (let index in this.contest.borders) {
             const border = this.contest.borders[index]
-            if (row.total >= rankings[border]) {
+            if (row.total >= rankings[Math.min(border, rankings.length) - 1]) {
               if (index < headers.length) return headers[index]
               return index % 2 ? 'table-light' : ''
             }
@@ -397,13 +428,13 @@ export default {
         this.judge = isGuest(this.user) ? null : (this.contest.judges.find(j => j._id === this.user) ? this.user : this.contest.judges[0]._id)
         this.scores = resp.scores
         this.adjusts = resp.adjusts
-        this.socket.on('score', score => this.parse(score, this.scores))
+        this.socket.on('score', score => this.parse(score, this.scores, matchScore))
         this.socket.on('contest', contest => { this.contest = contest })
       })
     },
     focus (row) {
       if (this.readonly) return
-      this[this.isSummary ? 'focusAdjust' : 'focusEvaluation'] = row.field
+      this[Array.isArray(row.field.choices) ? 'focusEvaluation' : 'focusAdjust'] = row.field
       this.focusCandidate = row.item
       this.choosing = true
     },
@@ -414,7 +445,7 @@ export default {
         this.focusAdjust = null
         this.choosing = false
       }
-      if (type === 'confirm') {
+      if (!this.isSummary && type === 'confirm') {
         const score = res[0].value
         if (this.focusEvaluation) {
           this.socket.emit('score', this.focusEvaluation._id, this.focusCandidate._id, score, this.isRoot ? this.judge : null, resp => {
@@ -422,16 +453,17 @@ export default {
               this.error('上传评分失败，请重试')
             } else if (resp.s) {
               postUpdate()
-              this.parse(resp.s, this.scores)
+              this.parse(resp.s, this.scores, matchScore)
             }
           })
         } else if (this.focusAdjust) {
-          this.socket.emit('adjust', this.focusAdjust._id, this.focusCandidate._id, score, resp => {
+          this.socket.emit('adjust', this.focusAdjust._id, this.focusCandidate._id, this.phase, score, resp => {
             if (resp.e) {
               this.error('上传扣分失败，请重试')
             } else if (resp.a) {
               postUpdate()
-              this.parse(resp.a, this.adjusts)
+              console.log(resp.a, this.adjusts, matchAdjust)
+              this.parse(resp.a, this.adjusts, matchAdjust)
             }
           })
         }
