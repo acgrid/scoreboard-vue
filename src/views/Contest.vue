@@ -53,7 +53,7 @@
         <template v-slot:thead-top="data">
           <b-tr>
             <b-th></b-th>
-            <b-th variant="info" colspan="3">选手信息</b-th>
+            <b-th variant="info" colspan="2">选手信息</b-th>
             <b-th v-if="isSummary"></b-th>
             <b-th v-if="isSummary" :colspan="contest.disciplines.length">扣分项</b-th>
             <b-th v-else-if="currentPhase" :colspan="currentPhase.items.length">{{ currentPhase.name }}评分</b-th>
@@ -114,6 +114,7 @@
 <script>
 import moment from 'moment'
 import XLSX from 'xlsx'
+import uniq from 'loadsh/uniq'
 import sum from 'loadsh/sum'
 import makeRange from 'loadsh/range'
 import VuePickerMobile from 'vue-picker-mobile'
@@ -161,7 +162,7 @@ export default {
       return isRoot(this.user)
     },
     canDetermine () {
-      return canDetermine(this.user)
+      return canDetermine(this.user) && this.currentPhase
     },
     isSummary () {
       return this.phase === null
@@ -195,7 +196,7 @@ export default {
       }
     },
     highlightEnabled () {
-      return this.isSummary || (this.currentPhase.promote || this.currentPhase.eliminate)
+      return !this.currentPhase || (this.currentPhase.promote || this.currentPhase.eliminate)
     },
     allCandidates () { // all
       return this.contest ? this.contest.candidates.reduce((candidates, group) => {
@@ -343,15 +344,31 @@ export default {
       index === -1 ? collection.push(single) : this.$set(collection, index, single)
     },
     highlight (row) {
-      return
+      if (this.isDetermined(true, row._id)) return 'table-success'
+      if (this.isDetermined(false, row._id)) return 'table-danger'
       if (this.highlightEnabled && row.total) {
-        const rank = this.rows.filter(r => r.total && r.total > row.total).length + 1
-        const { promote, eliminate } = this.currentPhase
-        if (promote && rank <= promote) return 'table-success'
-        // if (eliminate && rank > chunk - eliminate) return 'table-danger'
+        const rankings = uniq(this.rows.map(r => r.total))
+        if (this.isSummary && this.contest.borders) {
+          const headers = ['table-success', 'table-info', 'table-warning']
+          for (let index in this.contest.borders) {
+            const border = this.contest.borders[index]
+            if (row.total >= rankings[border]) {
+              if (index < headers.length) return headers[index]
+              return index % 2 ? 'table-light' : ''
+            }
+          }
+          return 'table-danger'
+        } else {
+          let { promote, eliminate } = this.currentPhase
+          promote = promote || 0
+          eliminate = eliminate || 0
+          if (promote + eliminate > rankings.length) return
+          if (row.total >= rankings[promote]) return 'table-success'
+          if (row.total <= rankings[rankings.length - eliminate]) return 'table-danger'
+          return 'table-warning'
+        }
       }
-      if (row.total) return 'table-warning'
-      if (highlightTick++ % 2) return 'table-secondary'
+      if (highlightTick++ % 2) return 'table-info'
     },
     auth () {
       this.online = false
