@@ -243,16 +243,17 @@ export default {
     scoreCols () {
       if (!this.contest) return []
       const columns = []
+      const sortable = !this.isJudge
       if (this.isSummary) {
         columns.push({ key: 'avg', label: '加权平均分', sortable: true })
         columns.push({ key: 'adjust', label: '总扣分', sortable: true })
       } else {
         this.currentPhase.items.forEach(item => {
-          columns.push({ ...item, key: item._id, label: item.name, sortable: true })
+          columns.push({ ...item, key: item._id, label: item.name, sortable })
         })
         if (!this.isJudge) {
           this.contest.disciplines.forEach(item => {
-            columns.push({ ...item, key: item._id, label: item.name, sortable: true })
+            columns.push({ ...item, key: item._id, label: item.name, sortable })
           })
         }
       }
@@ -260,9 +261,10 @@ export default {
     },
     cols () {
       if (!this.contest) return []
-      const columns = [{ key: 'index', label: '行号' }, { key: 'seq', label: '参赛号', sortable: true }, { key: 'name', label: '姓名' }]
+      const sortable = !this.isJudge
+      const columns = [{ key: 'index', label: '行号' }, { key: 'seq', label: '参赛号', sortable }, { key: 'name', label: '姓名' }]
       columns.push(...this.scoreCols)
-      columns.push({ key: 'total', label: this.isSummary ? '最终分' : (this.isJudge ? '评委总分' : '环节总分'), sortable: true })
+      columns.push({ key: 'total', label: this.isSummary ? '最终分' : (this.isJudge ? '评委总分' : '环节总分'), sortable })
       return columns
     },
     rows () {
