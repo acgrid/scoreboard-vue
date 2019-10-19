@@ -10,7 +10,7 @@ import Adjust from './model/adjust'
 const dbg = debug('sc:socket')
 
 const makeContest = async c => Contest.findById(c).populate('judges', '-password').populate('evaluations.items').populate('disciplines').populate((await Contest.findById(c, 'candidates')).candidates.map((_, index) => `candidates.${index}`).join(' '))
-const ensureCandidate = (id, groups) => groups.findIndex(group => group.findIndex(candidate => candidate && candidate.equals ? candidate.equals(id) : candidate === id) !== -1)
+const ensureCandidate = (id, groups) => groups.findIndex(group => group.findIndex(candidate => candidate && candidate.equals ? candidate.equals(id) : candidate === id) !== -1) !== -1
 
 export default function (http) {
   const server = io(http)
@@ -90,20 +90,16 @@ export default function (http) {
         }
       }
     })
-    socket.on('eliminate', async (round, candidate, ack) => {
-      dbg(`Eliminate: ${round}: ${candidate}`)
-      if (round > 0 && session.contest && isRoot(session.judge)) {
+    socket.on('determine', async (determination, phase, candidate, ack) => {
+      if (session.contest && canDetermine(session.judge)) {
+        if (Number.isNaN(phase) || phase < 0) return dbg('Bad group datatype')
+        dbg(`${determination ? 'Promoted' : 'Eliminated'} : ${phase}: ${candidate}`)
         const contest = await Contest.findById(session.contest)
-        if (!contest.round) return
-        if (round >= contest.groups.length) return
-        range(round, contest.groups.length).forEach(index => {
-          const group = contest.groups[index]
-          if (!group) return
-          const found = group.candidates.indexOf(candidate)
-          if (!group.eliminated) group.eliminated = []
-          if (found >= 0) group.eliminated.push(...group.candidates.splice(found, 1))
-        })
-        console.log(contest)
+        if (phase >= contest.evaluations.length) return dbg('Group index overflow')
+        if (!ensureCandidate(candidate, contest.candidates)) return dbg('Candidate does not exist')
+        if (ensureCandidate(candidate, contest.promotions)) return dbg('Candidate already promoted')
+        if (ensureCandidate(candidate, contest.eliminations)) return dbg('Candidate already eliminated')
+        contest[determination ? 'promotions' : 'eliminations'].push(candidate)
         await contest.save()
         const c = await makeContest(session.contest)
         socket.to(session.contest).emit('contest', c)

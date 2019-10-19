@@ -31,10 +31,9 @@
           {{ data.index + 1 }}
         </template>
         <template v-slot:cell(seq)="row">
+          <b-button variant="outline-dark" v-if="canDetermine && currentPhase.promote" class="" :class="{ 'text-success': isDetermined(true, row.item._id) }" :disabled="isDetermined(null, row.item._id)" type="button" aria-label="Promote" @click="determine(true, row.item._id)">&check;</b-button>
           {{ row.value }}
-          <button v-if="root && group < contest.groups.length - 1" type="button" class="close" aria-label="Eliminate" @click="eliminate(row.item._id)">
-            <span aria-hidden="true">&times;</span>
-          </button>
+          <b-button variant="outline-dark" v-if="canDetermine && currentPhase.eliminate" :class="{ 'text-danger': isDetermined(false, row.item._id) }" :disabled="isDetermined(null, row.item._id)" type="button" aria-label="Eliminate" @click="determine(false, row.item._id)">&times;</b-button>
         </template>
         <template v-for="col in scoreCols" v-slot:[`head(${col.key})`]>
           <div :key="col.key">
@@ -119,7 +118,7 @@ import sum from 'loadsh/sum'
 import makeRange from 'loadsh/range'
 import VuePickerMobile from 'vue-picker-mobile'
 import socket from '../api/socket'
-import { isRoot, isGuest, isJudge, canAdjust } from '../../lib/identity'
+import { isRoot, isGuest, isJudge, canAdjust, canDetermine } from '../../lib/identity'
 let highlightTick = 0
 const safeSplice = (arr, rank) => {
   while(rank) {
@@ -160,6 +159,9 @@ export default {
     },
     root () {
       return isRoot(this.user)
+    },
+    canDetermine () {
+      return canDetermine(this.user)
     },
     isSummary () {
       return this.phase === null
@@ -256,7 +258,12 @@ export default {
       if (!this.contest) return []
       try {
         const index = this.page - 1
-        const candidates = this.contest.candidates[index].map(candidate => {
+        const candidates = this.contest.candidates[index].filter(candidate => {
+          for (let phase = 0; phase < this.phase; phase++) {
+            if (this.isDetermined(null, candidate._id, phase)) return false
+          }
+          return true
+        }).map(candidate => {
           let total = 0
           if (this.isSummary) {
             const averages = this.averaged[candidate._id]
@@ -407,12 +414,22 @@ export default {
         }
       }
     },
-    eliminate (candidate) {
-      if (confirm('确认将选手排除出下一轮？')) {
-        this.socket.emit('eliminate', this.group + 1, candidate, contest => {
-          if (contest) this.contest = contest
+    determine (determination, candidate) {
+      const title = determination ? '晋级' : '淘汰'
+      if (confirm(`确认将选手设置为${title}？`)) {
+        this.socket.emit('determine', determination, this.phase, candidate, contest => {
+          if (contest) {
+            this.contest = contest
+            this.$bvToast.toast('操作成功', { title, variant: 'success', solid: true })
+          }
         })
       }
+    },
+    isDetermined (determination, candidate, phase) {
+      if (determination === null) return this.isDetermined(true, candidate, phase) || this.isDetermined(false, candidate, phase)
+      if (typeof phase === 'undefined') phase = this.phase
+      const list = this.contest[determination ? 'promotions' : 'eliminations'][phase]
+      return list ? list.indexOf(candidate) !== -1 : false
     },
     reset () {
       this.file = null
