@@ -1,0 +1,17 @@
+[Unit]
+Description=Scoreboard
+After=mongod.service
+
+[Service]
+Type=simple
+PIDFile=/scoreboard/dist-server/server.pid
+ExecStart=/usr/bin/node ./dist-server/bundle.js
+WorkingDirectory=/scoreboard
+Environment=NODE_ENV=production
+PrivateTmp=true
+KillMode=process
+Restart=always
+StartLimitBurst=20
+
+[Install]
+WantedBy=multi-user.target
