@@ -88,7 +88,7 @@
     <template v-else>
       <h2>请认证</h2>
       <b-form @submit.prevent="auth">
-        <b-form-group label="用户名：" label-for="username" description="主管：root 助理：guest">
+        <b-form-group label="用户名：" label-for="username" description="主管：root 评委助理：assist 舞台助理：guest">
           <b-form-input
             id="username"
             v-model="form.judge"
@@ -176,8 +176,9 @@ export default {
       return moment(this.contest.date)
     },
     judges () {
-      if (!this.contest) return []
-      return [{ text: '平均', value: null }, ...this.contest.judges.map((j) => {
+      const average = [{ text: '平均', value: null }]
+      if (!this.contest || isGuest(this.user)) return average
+      return [...average, ...this.contest.judges.map((j) => {
         return { text: j.name, value: j._id, disabled: isJudge(this.user) && j._id !== this.user }
       })]
     },
@@ -249,7 +250,7 @@ export default {
     },
     cols () {
       if (!this.contest) return []
-      const columns = [{ key: 'index', label: '行号' }, { key: 'seq', label: '参赛号', sortable: true }, { key: 'name', label: '选手名' }, { key: 'nickname', label: '昵称' }]
+      const columns = [{ key: 'index', label: '行号' }, { key: 'seq', label: '参赛号', sortable: true }, { key: 'name', label: '姓名' }]
       if (this.isSummary) columns.push({ key: 'avg', label: '加权去重均分', sortable: true })
       columns.push(...this.scoreCols)
       columns.push({ key: 'total', label: this.isSummary ? '最终分' : '评委总分', sortable: true })
@@ -388,7 +389,7 @@ export default {
         localStorage.setItem('password', this.form.password)
         this.user = resp.judge._id
         this.contest = resp.contest
-        this.judge = this.contest.judges.find(j => j._id === this.user) ? this.user : this.contest.judges[0]._id
+        this.judge = isGuest(this.user) ? null : (this.contest.judges.find(j => j._id === this.user) ? this.user : this.contest.judges[0]._id)
         this.scores = resp.scores
         this.adjusts = resp.adjusts
         this.socket.on('score', score => this.parse(score, this.scores))
@@ -490,10 +491,9 @@ export default {
               group--
               const seq = getCellValue(sheet, 'B', row)
               const name = getCellValue(sheet, 'C', row)
-              const nickname = getCellValue(sheet, 'D', row)
-              if (!name || !nickname) return
+              if (!name) return
               if (!groups[group]) groups[group] = []
-              groups[group].push({ seq, name, nickname })
+              groups[group].push({ seq, name })
             })
             execute(groups)
           }
