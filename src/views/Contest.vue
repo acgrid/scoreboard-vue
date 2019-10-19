@@ -124,17 +124,8 @@ import VuePickerMobile from 'vue-picker-mobile'
 import socket from '../api/socket'
 import { isRoot, isGuest, isJudge, canAdjust, canDetermine } from '../../lib/identity'
 let highlightTick = 0
-const safeSplice = (arr, rank) => {
-  while(rank) {
-    let spliced
-    do {
-      spliced = arr.splice(rank, 1)
-    } while (arr.length && spliced === arr[0])
-    rank > 0 ? rank-- : rank++
-  }
-}
-const matchScore = single => (s => s.judge === single.judge && s.candidate === single.candidate && s.evaluation === single.evaluation)
-const matchAdjust =  single => (a => a.phase === single.phase && a.candidate === single.candidate && a.discipline === single.discipline)
+const matchScore = single => s => s.judge === single.judge && s.candidate === single.candidate && s.evaluation === single.evaluation
+const matchAdjust = single => a => a.phase === single.phase && a.candidate === single.candidate && a.discipline === single.discipline
 export default {
   name: 'Contest',
   components: { VuePickerMobile },
@@ -201,11 +192,12 @@ export default {
       })]
     },
     currentPhase () {
-      if (!this.contest || this.isSummary) return
+      if (!this.contest || this.isSummary) return null
       try {
         return this.contest.evaluations[this.phase]
       } catch (e) {
         console.error(e)
+        return null
       }
     },
     highlightEnabled () {
@@ -225,26 +217,29 @@ export default {
     },
     averaged () {
       try {
-      return this.allCandidates.reduce((carry, candidate) => {
-        const id = candidate._id
-        const scores = this.allEvaluations.reduce((coll, e) => {
-          coll[e] = this.scores.filter(s => s.candidate === id && s.evaluation === e && s.score).map(s => s.score)
-          return coll
+        return this.allCandidates.reduce((carry, candidate) => {
+          const id = candidate._id
+          const scores = this.allEvaluations.reduce((coll, e) => {
+            coll[e] = this.scores.filter(s => s.candidate === id && s.evaluation === e && s.score).map(s => s.score)
+            return coll
+          }, {})
+          Object.keys(scores).forEach(e => {
+            if (scores[e].length !== this.contest.judges.length) {
+              scores[e] = null
+              return
+            }
+            scores[e].sort((a, b) => b - a)
+            scores[e].splice(0, this.contest.highest)
+            scores[e].splice(-this.contest.lowest)
+            scores[e] = sum(scores[e]) / scores[e].length
+          })
+          carry[id] = scores
+          return carry
         }, {})
-        Object.keys(scores).forEach(e => {
-          if (scores[e].length !== this.contest.judges.length) {
-            scores[e] = null
-            return
-          }
-          scores[e].sort((a, b) => b - a)
-          scores[e].splice(0, this.contest.highest)
-          scores[e].splice(-this.contest.lowest)
-          scores[e] = sum(scores[e]) / scores[e].length
-        })
-        carry[id] = scores
-        return carry
-      }, {})
-      } catch (e) { console.error(e) }
+      } catch (e) {
+        console.error(e)
+        return {}
+      }
     },
     scoreCols () {
       if (!this.contest) return []
@@ -339,13 +334,14 @@ export default {
     },
     pickerList () {
       if (this.focusEvaluation) return this.focusEvaluation.choices.map(c => ({ label: `${c.name} (${(c.score / this.contest.multiplier).toFixed(1)})`, value: c.score }))
-      if (this.focusAdjust) return makeRange(0, this.focusAdjust.repeat).map(a => ({ label: (a * this.focusAdjust.single / this.contest.multiplier).toFixed(1), value: a * this.focusAdjust.single } ))
+      if (this.focusAdjust) return makeRange(0, this.focusAdjust.repeat).map(a => ({ label: (a * this.focusAdjust.single / this.contest.multiplier).toFixed(1), value: a * this.focusAdjust.single }))
       return [{ label: '', value: '' }]
     },
     pickerValue () {
-      if (!this.focusCandidate) return
+      if (!this.focusCandidate) return null
       if (this.focusEvaluation) return this.focusCandidate[this.focusEvaluation._id]
       if (this.focusAdjust) return this.focusCandidate[this.focusAdjust._id]
+      return null
     }
   },
   created () {
