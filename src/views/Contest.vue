@@ -269,7 +269,10 @@ export default {
       if (!this.contest) return []
       try {
         const index = this.page - 1
-        const candidates = this.contest.candidates[index].filter(candidate => {
+        const candidates = (this.isSummary ? this.contest.candidates.reduce((all, group) => {
+          all.push(...group)
+          return all
+        }, []) : this.contest.candidates[index]).filter(candidate => {
           for (let phase = 0; phase < this.phase; phase++) {
             if (this.isDetermined(null, candidate._id, phase)) return false
           }
