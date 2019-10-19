@@ -11,7 +11,7 @@ export default {
 }
 </script>
 <style lang="less">
-  body {
+  #app {
     margin: 1em 0;
   }
 </style>
