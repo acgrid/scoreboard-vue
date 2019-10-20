@@ -100,7 +100,11 @@ export default function (http) {
         if (!ensureCandidate(candidate, contest.candidates)) return dbg('Candidate does not exist')
         if (ensureCandidate(candidate, contest.promotions)) return dbg('Candidate already promoted')
         if (ensureCandidate(candidate, contest.eliminations)) return dbg('Candidate already eliminated')
-        contest[determination ? 'promotions' : 'eliminations'].push(candidate)
+        const targetName = determination ? 'promotions' : 'eliminations'
+        const target = contest[targetName]
+        if (!target[phase]) target[phase] = []
+        target[phase].push(candidate)
+        contest[targetName] = target
         await contest.save()
         const c = await makeContest(session.contest)
         socket.to(session.contest).emit('contest', c)

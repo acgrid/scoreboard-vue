@@ -274,7 +274,7 @@ export default {
         const candidates = (this.isSummary ? this.contest.candidates.reduce((all, group) => {
           all.push(...group)
           return all
-        }, []) : this.contest.candidates[index]).filter(candidate => {
+        }, []) : (this.contest.candidates[index] || [])).filter(candidate => {
           const nextPhase = this.isSummary ? this.contest.evaluations.length : this.phase
           for (let phase = 0; phase < nextPhase; phase++) {
             if (this.isDetermined(null, candidate._id, phase)) return false
