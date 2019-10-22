@@ -45,13 +45,13 @@
           <div :key="col.key" @click="focus(row)">{{ typeof row.value === 'number' ? (row.value / contest.multiplier).toFixed(2) : '---' }}</div>
         </template>
         <template v-slot:cell(avg)="row">
-          <b>{{ typeof row.value === 'number' ? (row.value / contest.multiplier).toFixed(2) : '-' }}</b>
+          <b>{{ typeof row.value === 'number' ? (row.value / contest.multiplier).toFixed(3) : '-' }}</b>
         </template>
         <template v-slot:cell(adjust)="row">
           <b>{{ typeof row.value === 'number' ? (row.value / contest.multiplier).toFixed(2) : '-' }}</b>
         </template>
         <template v-slot:cell(total)="row">
-          <b>{{ typeof row.value === 'number' ? (row.value / contest.multiplier).toFixed(2) : '-' }}</b>
+          <b>{{ typeof row.value === 'number' ? (row.value / contest.multiplier).toFixed(3) : '-' }}</b>
         </template>
         <template v-slot:thead-top="data">
           <b-tr>
