@@ -29,7 +29,7 @@
     "express-json-error-handler": "^3.0.0",
     "loadsh": "^0.0.4",
     "moment": "^2.24.0",
-    "mongoose": "^5.7.1",
+    "mongoose": "^5.7.5",
     "register-service-worker": "^1.6.2",
     "saslprep": "^1.0.3",
     "socket.io": "^2.3.0",
