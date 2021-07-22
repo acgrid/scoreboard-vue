@@ -39,7 +39,7 @@
     "vue-picker-mobile": "^0.1.93",
     "vue-router": "^3.0.3",
     "vuex": "^3.0.1",
-    "xlsx": "^0.15.1"
+    "xlsx": "^0.17.0"
   },
   "devDependencies": {
     "@types/lodash": "^4.14.141",
