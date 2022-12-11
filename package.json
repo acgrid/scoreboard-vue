@@ -24,7 +24,7 @@
     "cross-env": "^6.0.0",
     "debug": "^4.1.1",
     "dot-prop": "^5.1.0",
-    "express": "^4.17.1",
+    "express": "^4.17.3",
     "express-async-errors": "^3.1.1",
     "express-json-error-handler": "^3.0.0",
     "loadsh": "^0.0.4",
